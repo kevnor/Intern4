@@ -2,6 +2,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WorkApprovalList from './WorkApprovalList';
+import { useWorkApprovals } from '../hooks/useWorkApprovals';
+import { useAuth } from '../../../../app/providers/AuthContext';
 
 const mockUseAuth = vi.fn();
 const mockGetPendingRegiApprovals = vi.fn();
@@ -13,6 +15,7 @@ vi.mock('../../../../app/providers/AuthContext', () => ({
 }));
 
 vi.mock('../../../../server/dao/regiDAO', () => ({
+  ALREADY_PROCESSED_MESSAGE: 'Registreringen er allerede behandlet av noen andre.',
   getPendingRegiApprovals: (...args: unknown[]) => mockGetPendingRegiApprovals(...args),
   approveRegiLog: (...args: unknown[]) => mockApproveRegiLog(...args),
   rejectRegiLog: (...args: unknown[]) => mockRejectRegiLog(...args),
@@ -54,6 +57,12 @@ const approvals = [
   },
 ];
 
+// Wires the list to the real hook, as WorkManagerPage does.
+const ConnectedList = () => {
+  const { user, loading } = useAuth();
+  return <WorkApprovalList {...useWorkApprovals(user, loading)} />;
+};
+
 describe('WorkApprovalList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -77,20 +86,20 @@ describe('WorkApprovalList', () => {
   });
 
   it('renders action buttons for each pending approval and keeps long-title rows actionable', async () => {
-    render(<WorkApprovalList />);
+    render(<ConnectedList />);
 
     expect((await screen.findAllByText('Kari Godkjenner')).length).toBeGreaterThan(0);
 
     expect(screen.getAllByLabelText(/godkjenn dette er en veldig lang tittel/i)).toHaveLength(2);
-    expect(screen.getAllByLabelText(/avvis dette er en veldig lang tittel/i)).toHaveLength(2);
+    expect(screen.getAllByLabelText(/avslå dette er en veldig lang tittel/i)).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: /godkjenn /i })).toHaveLength(4);
-    expect(screen.getAllByRole('button', { name: /avvis /i })).toHaveLength(4);
+    expect(screen.getAllByRole('button', { name: /avslå /i })).toHaveLength(4);
   });
 
   it('triggers approve and reject without opening the modal, while row clicks still open it', async () => {
     const user = userEvent.setup();
 
-    render(<WorkApprovalList />);
+    render(<ConnectedList />);
 
     expect((await screen.findAllByText('Kari Godkjenner')).length).toBeGreaterThan(0);
 
@@ -109,10 +118,14 @@ describe('WorkApprovalList', () => {
 
     expect(screen.getByTestId('work-approval-modal')).toHaveTextContent('Oppgaveinnsending');
 
-    await user.click(screen.getAllByLabelText(/avvis oppgaveinnsending/i)[0]);
+    await user.click(screen.getAllByLabelText(/avslå oppgaveinnsending/i)[0]);
 
     await waitFor(() => {
-      expect(mockRejectRegiLog).toHaveBeenCalledWith('approval-2');
+      expect(mockRejectRegiLog).toHaveBeenCalledWith(
+        'approval-2',
+        '99999999-9999-4999-8999-999999999999',
+        undefined
+      );
     });
   });
 
@@ -124,9 +137,9 @@ describe('WorkApprovalList', () => {
       })
     );
 
-    const { unmount } = render(<WorkApprovalList />);
+    const { unmount } = render(<ConnectedList />);
 
-    expect(screen.getAllByText('Laster...').length).toBeGreaterThan(0);
+    expect(screen.getByText('Laster...')).toBeInTheDocument();
 
     resolveApprovals?.(approvals);
 
@@ -134,19 +147,19 @@ describe('WorkApprovalList', () => {
 
     unmount();
     mockGetPendingRegiApprovals.mockResolvedValueOnce([]);
-    render(<WorkApprovalList />);
-    expect(await screen.findAllByText('Ingen ventende registreringer.')).toHaveLength(2);
+    render(<ConnectedList />);
+    expect(await screen.findByText('Ingen ventende registreringer.')).toBeInTheDocument();
 
     unmount();
     mockGetPendingRegiApprovals.mockRejectedValueOnce(new Error('boom'));
-    render(<WorkApprovalList />);
+    render(<ConnectedList />);
     expect(await screen.findByText('Kunne ikke laste godkjenninger.')).toBeInTheDocument();
   });
 
   it('keeps the mobile card actions separate from the row body', async () => {
     const user = userEvent.setup();
 
-    render(<WorkApprovalList />);
+    render(<ConnectedList />);
 
     const cards = await screen.findAllByTestId('approval-card');
     const firstCard = cards[0];
@@ -163,5 +176,47 @@ describe('WorkApprovalList', () => {
       );
     });
     expect(screen.queryByTestId('work-approval-modal')).not.toBeInTheDocument();
+  });
+
+  it('removes a row another manager already processed and says so', async () => {
+    const user = userEvent.setup();
+    mockApproveRegiLog.mockRejectedValueOnce(
+      new Error('Registreringen er allerede behandlet av noen andre.')
+    );
+
+    render(<ConnectedList />);
+
+    await screen.findAllByText('Ola Oppgave');
+    await user.click(screen.getAllByLabelText(/godkjenn oppgaveinnsending/i)[0]);
+
+    expect(
+      await screen.findByText('Registreringen er allerede behandlet av noen andre.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Ola Oppgave')).not.toBeInTheDocument();
+  });
+
+  it('keeps each in-flight row disabled independently', async () => {
+    const user = userEvent.setup();
+    const pending: Array<() => void> = [];
+    mockApproveRegiLog.mockImplementation(
+      () => new Promise<void>((resolve) => pending.push(() => resolve()))
+    );
+
+    render(<ConnectedList />);
+
+    await screen.findAllByText('Ola Oppgave');
+    const table = screen.getByRole('table');
+    await user.click(within(table).getByLabelText(/godkjenn dette er en veldig lang tittel/i));
+    await user.click(within(table).getByLabelText(/godkjenn oppgaveinnsending/i));
+
+    expect(within(table).getByLabelText(/godkjenn dette er en veldig lang tittel/i)).toBeDisabled();
+    expect(within(table).getByLabelText(/godkjenn oppgaveinnsending/i)).toBeDisabled();
+
+    pending[1]();
+    await waitFor(() =>
+      expect(within(table).queryByText('Oppgaveinnsending')).not.toBeInTheDocument()
+    );
+    expect(within(table).getByLabelText(/godkjenn dette er en veldig lang tittel/i)).toBeDisabled();
+    pending[0]();
   });
 });

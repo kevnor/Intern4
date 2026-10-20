@@ -1,29 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getRequiredRegiHoursForRole } from '../../../../app/constants/regiRequirements';
+import {
+  DEFAULT_SEMESTER_HOURS,
+  getRequiredHoursForRole,
+} from '../../../../app/constants/regiRequirements';
 import { canApproveWork } from '../../permissions';
 import { getApprovedRegiHoursByUserSince } from '../../../../server/dao/regiDAO';
 import { getActiveUsersWithRole } from '../../../../server/dao/userDAO';
 import { AuthUser } from '../../../auth/hooks/useAuth';
+import { getRequiredHours } from '../../../../server/dao/semesterSettingsDAO';
+import { getCompletedShiftCounts } from '../../../../server/dao/vaktHoursDAO';
+import { SHIFT_HOURS } from '../../../shifts/slots';
+import { getSemester, getSemesterStart } from '../../../../shared/utils/semester';
 
 export type RegistatusRow = {
   id: string;
   name: string;
   email: string;
   role?: string;
+  // Regi and vakt added together; the breakdown below is shown when the resident has vakt.
   requiredHours: number;
   approvedHours: number;
   remainingHours: number;
+  regiHours: number;
+  vaktHours: number;
+  requiresVakt: boolean;
   onLeave: boolean;
 };
-
-const getSemesterStart = (): Date => {
-  const now = new Date();
-  const year = now.getFullYear();
-  return now.getMonth() < 7 ? new Date(year, 0, 1) : new Date(year, 7, 1);
-};
-
-export const semesterStart = getSemesterStart();
-export const semesterLabel = semesterStart.toLocaleDateString('no-NO');
 
 export const useRegistatus = (user: AuthUser, authLoading: boolean) => {
   const [rows, setRows] = useState<RegistatusRow[]>([]);
@@ -36,24 +38,34 @@ export const useRegistatus = (user: AuthUser, authLoading: boolean) => {
       setLoading(true);
       setError(null);
 
-      const [activeUsers, hoursMap] = await Promise.all([
+      const [activeUsers, hoursMap, configuredHours, vaktCounts] = await Promise.all([
         getActiveUsersWithRole(),
-        getApprovedRegiHoursByUserSince(semesterStart),
+        getApprovedRegiHoursByUserSince(getSemesterStart()),
+        getRequiredHours(getSemester().key).catch(() => undefined),
+        // Without shifts everyone simply shows no vakt done.
+        getCompletedShiftCounts(getSemesterStart()).catch(() => ({}) as Record<string, number>),
       ]);
+      const totalHours = configuredHours ?? DEFAULT_SEMESTER_HOURS;
 
       const nextRows = activeUsers.map((activeUser) => {
-        const requiredHours = getRequiredRegiHoursForRole(activeUser.role);
-        const approvedHours = hoursMap[activeUser.id] ?? 0;
-        const remainingHours = Math.max(requiredHours - approvedHours, 0);
+        const required = getRequiredHoursForRole(activeUser.role, totalHours);
+        const regiHours = hoursMap[activeUser.id] ?? 0;
+        const vaktHours = (vaktCounts[activeUser.id] ?? 0) * SHIFT_HOURS;
+        // Extra regi doesn't make up for missing vakt, or the other way around.
+        const remainingHours =
+          Math.max(required.regi - regiHours, 0) + Math.max(required.vakt - vaktHours, 0);
 
         return {
           id: activeUser.id,
           name: activeUser.name,
           email: activeUser.email,
           role: activeUser.role ?? 'Halv/Halv',
-          requiredHours,
-          approvedHours,
+          requiredHours: required.regi + required.vakt,
+          approvedHours: regiHours + vaktHours,
           remainingHours,
+          regiHours,
+          vaktHours,
+          requiresVakt: required.vakt > 0 || vaktHours > 0,
           onLeave: activeUser.onLeave,
         };
       });
@@ -73,12 +85,15 @@ export const useRegistatus = (user: AuthUser, authLoading: boolean) => {
     }
   }, []);
 
+  // Depend on id and role, not the user object, which is recreated on every auth event.
+  const userId = user?.id;
+  const userRole = user?.role;
   useEffect(() => {
     if (authLoading) return;
-    if (!user) return;
-    if (!canApproveWork(user.role)) return;
+    if (!userId) return;
+    if (!canApproveWork(userRole)) return;
     void load();
-  }, [authLoading, load, user]);
+  }, [authLoading, load, userId, userRole]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -93,6 +108,7 @@ export const useRegistatus = (user: AuthUser, authLoading: boolean) => {
   }, [query, rows]);
 
   return {
+    semesterLabel: getSemesterStart().toLocaleDateString('no-NO'),
     filtered,
     loading,
     error,

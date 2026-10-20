@@ -5,6 +5,7 @@ export const USER_ROLES = {
   FULL_WORK: 'Full Regi',
   FULL_RECEPTION: 'Full Vakt',
   HALF_HALF: 'Halv/Halv',
+  VAKTSJEF: 'Vaktsjef',
   COMMITTEE_MEMBER: 'Utvalgsmedlem',
   GENERAL_MANAGER: 'Daglig leder',
   ADMIN: 'Admin',

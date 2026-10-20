@@ -1,8 +1,10 @@
-import LoginPage from './pages/LoginPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
+import { lazy } from 'react';
 import type { FeatureRoute } from '../../shared/types/feature';
 import { AUTH_PATHS } from './paths';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 
 export const authRoutes: FeatureRoute[] = [
   {

@@ -25,7 +25,9 @@ export const formatRoom = (roomNumber: number | null): string => {
   return String(roomNumber);
 };
 
-export const formatStudy = (resident: ResidentDirectoryUser): string => {
+export const formatStudy = (
+  resident: Pick<ResidentDirectoryUser, 'seniority' | 'study' | 'studyPlace'>
+): string => {
   const prefix = resident.seniority > 0 ? `${resident.seniority}. ` : '';
   const study = resident.study.trim();
   const studyPlace = resident.studyPlace.trim();
@@ -37,7 +39,7 @@ export const formatStudy = (resident: ResidentDirectoryUser): string => {
   return `${prefix}${study} (${studyPlace})`;
 };
 
-export const formatAddress = (resident: ResidentDirectoryUser): string => {
+export const formatAddress = (resident: Pick<ResidentDirectoryUser, 'address'>): string => {
   const parts = [resident.address.street, resident.address.city].filter((part) => part?.trim());
   return parts.length > 0 ? parts.join(', ') : '-';
 };
@@ -46,6 +48,30 @@ const includesQuery = (value: unknown, query: string): boolean =>
   String(value ?? '')
     .toLowerCase()
     .includes(query);
+
+export type ResidentSortKey = 'name' | 'room' | 'seniority';
+
+// Seniority descending is the order used for room draws (romslipp); ties fall back to name.
+export const sortResidents = (
+  residents: ResidentDirectoryUser[],
+  sortKey: ResidentSortKey
+): ResidentDirectoryUser[] => {
+  const byName = (a: ResidentDirectoryUser, b: ResidentDirectoryUser) =>
+    a.name.localeCompare(b.name, 'no', { sensitivity: 'base' });
+  const sorted = [...residents];
+  if (sortKey === 'room') {
+    sorted.sort(
+      (a, b) =>
+        (a.roomNumber || Number.MAX_SAFE_INTEGER) - (b.roomNumber || Number.MAX_SAFE_INTEGER) ||
+        byName(a, b)
+    );
+  } else if (sortKey === 'seniority') {
+    sorted.sort((a, b) => b.seniority - a.seniority || byName(a, b));
+  } else {
+    sorted.sort(byName);
+  }
+  return sorted;
+};
 
 export const filterResidents = (
   residents: ResidentDirectoryUser[],

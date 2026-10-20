@@ -144,7 +144,7 @@ export async function addTask(data: TaskCreationData): Promise<string> {
 
   const { error: e3 } = await supabase.from('work_tasks').insert({
     id: item.id,
-    deadline: data.deadline ?? null,
+    deadline: data.deadline ? formatDateColumnValue(data.deadline) : null,
     time_estimate: data.hourEstimate,
     contact_person_uuid: data.contactPersonId ?? null,
     max_participants: data.maxParticipants,
@@ -189,11 +189,7 @@ export async function getTask(taskId: string): Promise<Task | undefined> {
   return data ? toAppTask(data as TaskRow) : undefined;
 }
 
-export async function getTasks(): Promise<Task[]> {
-  const { data, error } = await supabase
-    .from('work_tasks')
-    .select(
-      `
+const TASK_LIST_COLUMNS = `
       id,
       created_at,
       deadline,
@@ -214,15 +210,79 @@ export async function getTasks(): Promise<Task[]> {
           created_at
         )
       )
-    `
-    )
-    .order('deadline', { ascending: true });
+    `;
+
+export type RecentTasksOptions = {
+  since: Date;
+  // Also include older tasks this user joined but hasn't sent in yet.
+  userId?: string;
+};
+
+// Pending assignments without hours are tasks the user joined but hasn't sent in.
+async function getUnsubmittedTaskIds(userId: string): Promise<number[]> {
+  const { data, error } = await supabase
+    .from('work_assignments')
+    .select('work_id')
+    .eq('user_uuid', userId)
+    .eq('approved_state', 0)
+    .is('hours_used', null);
+
+  if (error) throw new Error(`Could not get tasks: ${error.message}`);
+  return (data ?? [])
+    .map((row: AssignmentWorkIdRow) => row.work_id)
+    .filter((workId): workId is number => workId != null)
+    .map(Number);
+}
+
+// Same order as the database query: by deadline, tasks without a deadline last.
+const compareDeadlines = (a: TaskRow, b: TaskRow): number => {
+  if (!a.deadline) return b.deadline ? 1 : 0;
+  if (!b.deadline) return -1;
+  return a.deadline.localeCompare(b.deadline);
+};
+
+// Without options, every task ever created. With `recent`, only tasks created since then,
+// tasks that are still open (no deadline, or a deadline from today on), and the user's
+// unsubmitted tasks, so the list doesn't grow with every semester.
+export async function getTasks(recent?: RecentTasksOptions): Promise<Task[]> {
+  let query = supabase.from('work_tasks').select(TASK_LIST_COLUMNS);
+  if (recent) {
+    query = query.or(
+      [
+        `created_at.gte.${recent.since.toISOString()}`,
+        'deadline.is.null',
+        `deadline.gte.${formatDateColumnValue(new Date())}`,
+      ].join(',')
+    );
+  }
+
+  const [{ data, error }, unsubmittedIds] = await Promise.all([
+    query.order('deadline', { ascending: true }),
+    recent?.userId ? getUnsubmittedTaskIds(recent.userId) : Promise.resolve([]),
+  ]);
 
   if (error) {
     throw new Error(`Could not get tasks: ${error.message}`);
   }
 
-  return ((data ?? []) as TaskRow[]).map(toAppTask);
+  const rows = (data ?? []) as TaskRow[];
+  const loadedIds = new Set(rows.map((row) => Number(row.id)));
+  const missingIds = Array.from(new Set(unsubmittedIds)).filter((id) => !loadedIds.has(id));
+
+  if (missingIds.length > 0) {
+    const { data: extra, error: extraError } = await supabase
+      .from('work_tasks')
+      .select(TASK_LIST_COLUMNS)
+      .in('id', missingIds);
+
+    if (extraError) {
+      throw new Error(`Could not get tasks: ${extraError.message}`);
+    }
+    rows.push(...((extra ?? []) as TaskRow[]));
+    rows.sort(compareDeadlines);
+  }
+
+  return rows.map(toAppTask);
 }
 
 export async function updateTask(taskId: string, data: Partial<TaskCreationData>): Promise<void> {
@@ -250,7 +310,7 @@ export async function updateTask(taskId: string, data: Partial<TaskCreationData>
   }
 
   const patchTask: TaskPatch = {
-    deadline: data.deadline,
+    deadline: data.deadline ? formatDateColumnValue(data.deadline) : undefined,
     time_estimate: data.hourEstimate,
     contact_person_uuid: data.contactPersonId,
     max_participants: data.maxParticipants,

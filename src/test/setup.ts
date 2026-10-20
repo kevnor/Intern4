@@ -1,4 +1,11 @@
 import '@testing-library/jest-dom/vitest';
+import { vi } from 'vitest';
+
+// No semester setting configured: components fall back to the default hours.
+vi.mock('../server/dao/semesterSettingsDAO', () => ({
+  getRequiredHours: vi.fn().mockResolvedValue(undefined),
+  setRequiredHours: vi.fn().mockResolvedValue(undefined),
+}));
 
 class TestResizeObserver {
   observe() {}
@@ -7,3 +14,8 @@ class TestResizeObserver {
 }
 
 global.ResizeObserver = TestResizeObserver;
+
+// No finished vakt: components show zero vakt hours.
+vi.mock('../server/dao/vaktHoursDAO', () => ({
+  getCompletedShiftCounts: vi.fn().mockResolvedValue({}),
+}));

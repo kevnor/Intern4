@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProfilePage from './ProfilePage';
+import { ThemeProvider } from '../../../app/providers/ThemeProvider';
 
 const mockUseAuth = vi.fn();
 const mockGetUser = vi.fn();
@@ -79,6 +80,15 @@ const profile = {
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
 };
 
+const renderProfile = () =>
+  render(
+    <ThemeProvider>
+      <MemoryRouter>
+        <ProfilePage />
+      </MemoryRouter>
+    </ThemeProvider>
+  );
+
 describe('ProfilePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -109,11 +119,7 @@ describe('ProfilePage', () => {
   });
 
   it('loads the current profile into split-name fields and keeps email read-only', async () => {
-    render(
-      <MemoryRouter>
-        <ProfilePage />
-      </MemoryRouter>
-    );
+    renderProfile();
 
     expect(await screen.findByDisplayValue('Johannes')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Aamot-Skeidsvoll')).toBeInTheDocument();
@@ -126,11 +132,7 @@ describe('ProfilePage', () => {
   it('saves editable profile information with the merged name and current field values', async () => {
     const user = userEvent.setup();
 
-    render(
-      <MemoryRouter>
-        <ProfilePage />
-      </MemoryRouter>
-    );
+    renderProfile();
 
     const firstName = await screen.findByLabelText('Fornavn');
     await user.clear(firstName);
@@ -175,25 +177,22 @@ describe('ProfilePage', () => {
   it('validates and updates the password through the auth DAO', async () => {
     const user = userEvent.setup();
 
-    render(
-      <MemoryRouter>
-        <ProfilePage />
-      </MemoryRouter>
-    );
+    renderProfile();
 
     await screen.findByLabelText('Fornavn');
+    await user.click(screen.getByRole('tab', { name: 'Passord' }));
 
-    await user.type(screen.getByLabelText('Nytt passord *'), '123');
-    await user.type(screen.getByLabelText('Gjenta passord *'), '1234');
+    await user.type(screen.getByLabelText(/^nytt passord/i), '123');
+    await user.type(screen.getByLabelText(/^gjenta passord/i), '1234');
     await user.click(screen.getByRole('button', { name: 'Oppdater passord' }));
 
     expect(await screen.findByText('Passordet må være minst 6 tegn.')).toBeInTheDocument();
     expect(mockResetPassword).not.toHaveBeenCalled();
 
-    await user.clear(screen.getByLabelText('Nytt passord *'));
-    await user.clear(screen.getByLabelText('Gjenta passord *'));
-    await user.type(screen.getByLabelText('Nytt passord *'), 'sterktpassord');
-    await user.type(screen.getByLabelText('Gjenta passord *'), 'sterktpassord');
+    await user.clear(screen.getByLabelText(/^nytt passord/i));
+    await user.clear(screen.getByLabelText(/^gjenta passord/i));
+    await user.type(screen.getByLabelText(/^nytt passord/i), 'sterktpassord');
+    await user.type(screen.getByLabelText(/^gjenta passord/i), 'sterktpassord');
     await user.click(screen.getByRole('button', { name: 'Oppdater passord' }));
 
     await waitFor(() => {
@@ -205,11 +204,7 @@ describe('ProfilePage', () => {
   it('uploads and saves a new profile picture', async () => {
     const user = userEvent.setup();
 
-    render(
-      <MemoryRouter>
-        <ProfilePage />
-      </MemoryRouter>
-    );
+    renderProfile();
 
     await screen.findByLabelText('Fornavn');
 
@@ -240,11 +235,7 @@ describe('ProfilePage', () => {
     const user = userEvent.setup();
     mockCreateSignedImageUrl.mockRejectedValueOnce(new Error('signed url failed'));
 
-    render(
-      <MemoryRouter>
-        <ProfilePage />
-      </MemoryRouter>
-    );
+    renderProfile();
 
     await screen.findByLabelText('Fornavn');
 
@@ -263,20 +254,48 @@ describe('ProfilePage', () => {
     expect(mockDeleteImages).not.toHaveBeenCalled();
   });
 
-  it('renders legacy sections as clear stubs while profile picture upload is active', async () => {
-    render(
-      <MemoryRouter>
-        <ProfilePage />
-      </MemoryRouter>
-    );
+  it('hides unfinished sections and offers the theme choice', async () => {
+    const user = userEvent.setup();
+    renderProfile();
 
     await screen.findByLabelText('Fornavn');
 
-    expect(screen.getByRole('heading', { name: 'Profilbilde' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Preferanser' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Varsler' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'E-postlister' })).toBeInTheDocument();
-    expect(screen.getAllByText('Kommer senere').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Kommer senere')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'E-postlister' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Last opp bilde')).toBeEnabled();
+
+    await user.click(screen.getByRole('tab', { name: 'Utseende' }));
+    await user.click(screen.getByRole('radio', { name: 'Mørk' }));
+    expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+
+  it('keeps unsaved edits when the auth session refreshes', async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderProfile();
+
+    const city = await screen.findByLabelText('By');
+    await user.clear(city);
+    await user.type(city, 'Bergen');
+
+    // A token refresh hands out a new user object for the same person.
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: '11111111-1111-4111-8111-111111111111',
+        name: 'Johannes Aamot-Skeidsvoll',
+        email: 'johannes@singsaker.no',
+        role: 'Data',
+      },
+      loading: false,
+    });
+    rerender(
+      <ThemeProvider>
+        <MemoryRouter>
+          <ProfilePage />
+        </MemoryRouter>
+      </ThemeProvider>
+    );
+
+    expect(screen.getByLabelText('By')).toHaveValue('Bergen');
+    expect(mockGetUser).toHaveBeenCalledTimes(1);
   });
 });

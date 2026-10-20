@@ -28,7 +28,11 @@ BEGIN
         'work_items',
         'work_tasks',
         'work_assignments',
-        'work_misc'
+        'work_misc',
+        'semester_settings',
+        'vakt_shifts',
+        'vakt_unavailability',
+        'vakt_swap_log'
       )
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I', _pol, _tbl);
@@ -437,4 +441,124 @@ CREATE POLICY "Managers can delete work_misc"
       WHERE u.id = auth.uid()
         AND r.name IN ('Admin', 'Data', 'Regisjef')
     )
+  );
+
+-- ============================================================
+-- SEMESTER SETTINGS TABLE
+-- ============================================================
+-- Hours every resident owes per semester. Everyone authenticated
+-- can read; only Admin can change it.
+-- ============================================================
+
+ALTER TABLE semester_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can read semester settings"
+  ON semester_settings FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Admins can insert semester settings"
+  ON semester_settings FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM users u
+      JOIN roles r ON u.role_id = r.id
+      WHERE u.id = auth.uid()
+        AND r.name = 'Admin'
+    )
+  );
+
+CREATE POLICY "Admins can update semester settings"
+  ON semester_settings FOR UPDATE
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM users u
+      JOIN roles r ON u.role_id = r.id
+      WHERE u.id = auth.uid()
+        AND r.name = 'Admin'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM users u
+      JOIN roles r ON u.role_id = r.id
+      WHERE u.id = auth.uid()
+        AND r.name = 'Admin'
+    )
+  );
+
+-- ============================================================
+-- VAKT SHIFTS TABLE
+-- ============================================================
+-- Reception shifts. Residents read published shifts only; Admin
+-- and Vaktsjef (public.is_vakt_manager(), created by migration
+-- 20261020150000_add_vakt_shifts) read and write everything.
+-- ============================================================
+
+ALTER TABLE vakt_shifts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Residents can read published shifts"
+  ON vakt_shifts FOR SELECT
+  TO authenticated
+  USING (status = 'published' OR public.is_vakt_manager());
+
+CREATE POLICY "Vakt managers can insert shifts"
+  ON vakt_shifts FOR INSERT
+  TO authenticated
+  WITH CHECK (public.is_vakt_manager());
+
+CREATE POLICY "Vakt managers can update shifts"
+  ON vakt_shifts FOR UPDATE
+  TO authenticated
+  USING (public.is_vakt_manager())
+  WITH CHECK (public.is_vakt_manager());
+
+CREATE POLICY "Vakt managers can delete shifts"
+  ON vakt_shifts FOR DELETE
+  TO authenticated
+  USING (public.is_vakt_manager());
+
+-- ============================================================
+-- VAKT UNAVAILABILITY TABLE
+-- ============================================================
+-- Residents add and remove their own unavailable days. Admin and
+-- Vaktsjef can read everyone's (the schedule generator needs them).
+-- ============================================================
+
+ALTER TABLE vakt_unavailability ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Residents can read own unavailability"
+  ON vakt_unavailability FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid() OR public.is_vakt_manager());
+
+CREATE POLICY "Residents can add own unavailability"
+  ON vakt_unavailability FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Residents can delete own unavailability"
+  ON vakt_unavailability FOR DELETE
+  TO authenticated
+  USING (user_id = auth.uid() OR public.is_vakt_manager());
+
+-- ============================================================
+-- VAKT SWAP LOG TABLE
+-- ============================================================
+-- Shifts that changed hands. Written only by the claim_vakt_shift
+-- function (migration 20261020170000_add_vakt_swaps); residents
+-- read their own swaps, Admin and Vaktsjef read all.
+-- ============================================================
+
+ALTER TABLE vakt_swap_log ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Residents can read their own swaps"
+  ON vakt_swap_log FOR SELECT
+  TO authenticated
+  USING (
+    from_user_id = auth.uid()
+    OR to_user_id = auth.uid()
+    OR public.is_vakt_manager()
   );

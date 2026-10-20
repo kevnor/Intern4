@@ -1,3 +1,4 @@
+import { lazy } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { Navigate } from 'react-router-dom';
 import NotFoundPage from '../pages/NotFoundPage';
@@ -5,7 +6,9 @@ import ProtectedRoute from './ProtectedRoute';
 import { APP_ROUTES } from '../constants/appRoutes';
 import { features } from '../../features';
 import type { FeatureRoute } from '../../shared/types/feature';
-import { TASK_PATHS } from '../../features/tasks/paths';
+
+// Pages load on first visit, so the first download only contains the app shell.
+const HomePage = lazy(() => import('../pages/HomePage'));
 
 const featureRoutes: FeatureRoute[] = features.flatMap((feature) => feature.routes ?? []);
 
@@ -28,6 +31,18 @@ export const protectedRoutes: RouteObject[] = featureRoutes
   .filter((route) => !route.public)
   .map(toRouteObject);
 
+// App-level pages
+export const appRoutes: RouteObject[] = [
+  {
+    path: APP_ROUTES.HOME,
+    element: (
+      <ProtectedRoute>
+        <HomePage />
+      </ProtectedRoute>
+    ),
+  },
+];
+
 // Admin-only routes
 export const adminRoutes: RouteObject[] = [
   {
@@ -42,8 +57,8 @@ export const regisjefRoutes: RouteObject[] = [];
 // Default redirects
 export const redirectRoutes: RouteObject[] = [
   {
-    path: APP_ROUTES.HOME,
-    element: <Navigate to={TASK_PATHS.DASHBOARD} replace />,
+    path: APP_ROUTES.LEGACY_DASHBOARD,
+    element: <Navigate to={APP_ROUTES.HOME} replace />,
   },
   {
     path: '*',
@@ -55,6 +70,7 @@ export const redirectRoutes: RouteObject[] = [
 export const allRoutes: RouteObject[] = [
   ...publicRoutes,
   ...protectedRoutes,
+  ...appRoutes,
   ...adminRoutes,
   ...regisjefRoutes,
   ...redirectRoutes,

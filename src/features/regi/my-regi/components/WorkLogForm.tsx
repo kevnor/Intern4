@@ -1,75 +1,123 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ImagePlus, X } from 'lucide-react';
 import { z } from 'zod';
 import { RegiLogSchema, WorkTypeSchema } from '../../../../shared/types/regi';
 import { useAuth } from '../../../../app/providers/AuthContext';
-import { useWorkLogFormWorkflow } from '../hooks/useWorkLogFormWorkflow';
+import type { useWorkLogFormWorkflow } from '../hooks/useWorkLogFormWorkflow';
+import {
+  Button,
+  Field,
+  Input,
+  Select,
+  StatusMessage,
+  Textarea,
+} from '../../../../shared/components';
+import { formatDateColumnValue } from '../../../../shared/utils/date';
+import { validateImageFile } from '../../../../server/storage';
+import { cn } from '../../../../shared/utils/cn';
+
+const today = () => formatDateColumnValue(new Date());
 
 const FormSchema = z.object({
-  title: z.string().min(1, 'Påkrevd'),
-  description: z.string().min(1, 'Påkrevd'),
-  date: z.string().min(1, 'Påkrevd'),
-  hours: z.coerce.number().positive('Må være > 0'),
+  title: z.string().trim().min(1, 'Skriv en kort tittel'),
+  description: z.string().trim().min(1, 'Beskriv hva du gjorde'),
+  date: z
+    .string()
+    .min(1, 'Velg dato')
+    .refine((value) => value <= today(), 'Datoen kan ikke være i fremtiden'),
+  hours: z.coerce.number().positive('Må være mer enn 0'),
   type: WorkTypeSchema,
   images: z.array(z.instanceof(File)).optional(),
 });
 
 const getFileKey = (file: File) => `${file.name}-${file.size}-${file.lastModified}`;
 
-const WorkLogForm: React.FC<{ onCreated?: () => void }> = ({ onCreated }) => {
+const emptyForm = (type = '') => ({
+  title: '',
+  description: '',
+  date: today(),
+  hours: '',
+  type,
+});
+
+type WorkLogFormProps = ReturnType<typeof useWorkLogFormWorkflow> & {
+  onCreated?: () => void;
+  // Hidden when shown in a sheet, which has its own title.
+  hideHeading?: boolean;
+};
+
+const WorkLogForm: React.FC<WorkLogFormProps> = ({
+  categories,
+  createWorkLog,
+  onCreated,
+  hideHeading = false,
+}) => {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const { categories, createWorkLog } = useWorkLogFormWorkflow();
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    date: new Date().toISOString().split('T')[0],
-    hours: '',
-    type: '',
-  });
+  const [success, setSuccess] = useState(false);
+  const [form, setForm] = useState(emptyForm);
 
-  useEffect(() => {
-    if (categories.length === 0) return;
-    setForm((prev) => ({
-      ...prev,
-      type: prev.type || categories[0].name,
-    }));
-  }, [categories]);
+  // Default to the general "Regi" category (or the first one) unless the user picked one.
+  const selectedType =
+    form.type ||
+    categories.find((category) => category.name === 'Regi')?.name ||
+    categories[0]?.name ||
+    '';
 
-  const setField = (k: string, v: string) => setForm((s) => ({ ...s, [k]: v }));
+  const previews = useMemo(
+    () =>
+      files.map((file) => ({
+        file,
+        url: typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : '',
+      })),
+    [files]
+  );
+  useEffect(() => () => previews.forEach(({ url }) => url && URL.revokeObjectURL(url)), [previews]);
 
-  const syncFiles = (nextFiles: File[]) => {
-    setFiles(nextFiles);
-
-    if (!fileInputRef.current) return;
-    fileInputRef.current.value = '';
+  const setField = (key: keyof ReturnType<typeof emptyForm>, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setSuccess(false);
+    if (errors[key]) setErrors((current) => ({ ...current, [key]: '' }));
   };
 
   const addFiles = (selectedFiles: File[]) => {
     if (selectedFiles.length === 0) return;
+    setSuccess(false);
 
-    const existingFileKeys = new Set(files.map(getFileKey));
-    const nextFiles = [...files];
-
-    selectedFiles.forEach((file) => {
-      if (!existingFileKeys.has(getFileKey(file))) {
-        nextFiles.push(file);
+    const existingKeys = new Set(files.map(getFileKey));
+    const accepted: File[] = [];
+    for (const file of selectedFiles) {
+      try {
+        validateImageFile(file);
+      } catch (validationError) {
+        setErrors((current) => ({
+          ...current,
+          images: validationError instanceof Error ? validationError.message : 'Ugyldig fil.',
+        }));
+        continue;
       }
-    });
+      if (!existingKeys.has(getFileKey(file))) accepted.push(file);
+    }
 
-    syncFiles(nextFiles);
+    if (accepted.length === selectedFiles.length) {
+      setErrors((current) => ({ ...current, images: '' }));
+    }
+    setFiles((current) => [...current, ...accepted]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
-    const parsed = FormSchema.safeParse({ ...form, hours: form.hours, images: files });
+    setSuccess(false);
+    const parsed = FormSchema.safeParse({ ...form, type: selectedType, images: files });
     if (!parsed.success) {
       const map: Record<string, string> = {};
-      parsed.error.issues.forEach((i) => (map[i.path[0] as string] = i.message));
+      parsed.error.issues.forEach((issue) => (map[issue.path[0] as string] = issue.message));
       setErrors(map);
       return;
     }
@@ -80,10 +128,11 @@ const WorkLogForm: React.FC<{ onCreated?: () => void }> = ({ onCreated }) => {
       setSubmitting(true);
       const payload = RegiLogSchema.parse({
         userId: user.id,
-        title: form.title,
-        description: form.description,
-        date: new Date(form.date),
-        hours: Number(form.hours),
+        title: parsed.data.title,
+        description: parsed.data.description,
+        // Noon keeps the chosen calendar day regardless of time zone.
+        date: new Date(`${parsed.data.date}T12:00:00`),
+        hours: parsed.data.hours,
         type: parsed.data.type,
         createdAt: new Date(),
         status: 'pending',
@@ -101,20 +150,10 @@ const WorkLogForm: React.FC<{ onCreated?: () => void }> = ({ onCreated }) => {
         files
       );
 
-      setForm({
-        title: '',
-        description: '',
-        date: new Date().toISOString().split('T')[0],
-        hours: '',
-        type: categories[0]?.name ?? '',
-      });
+      setForm(emptyForm(selectedType));
       setFiles([]);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      if (onCreated) {
-        onCreated();
-      }
+      setSuccess(true);
+      onCreated?.();
     } catch (submitError) {
       setErrors({
         form:
@@ -124,106 +163,154 @@ const WorkLogForm: React.FC<{ onCreated?: () => void }> = ({ onCreated }) => {
       setSubmitting(false);
     }
   };
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <h2 className="font-semibold text-xl text-gray-900">Registrer regi</h2>
-      <div>
-        <label className="block mb-1 text-sm font-medium text-gray-700">Tittel</label>
-        <input
-          value={form.title}
-          onChange={(e) => setField('title', e.target.value)}
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Arbeidet oppsummert"
-        />
-        {errors.title && <p className="text-red-600 text-sm mt-1">{errors.title}</p>}
-      </div>
-
-      <div className="mb-3">
-        <label className="block mb-1 text-sm font-medium text-gray-700">Arbeidets art</label>
-        <select
-          value={form.type}
-          onChange={(e) => setField('type', e.target.value)}
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        >
-          <option value="">Velg type</option>
-          {categories.map((category) => (
-            <option key={category.id} value={category.name}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="mb-3">
-        <label className="block mb-1 text-sm font-medium text-gray-700">Beskrivelse</label>
-        <textarea
-          value={form.description}
-          onChange={(e) => setField('description', e.target.value)}
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          rows={4}
-          placeholder="Forklaring av arbeidet"
-        />
-        {errors.description && <p className="text-red-600 text-sm mt-1">{errors.description}</p>}
-      </div>
-
-      <div className="mb-3 grid grid-cols-2 gap-3">
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      {!hideHeading && (
         <div>
-          <label className="block mb-1 text-sm font-medium text-gray-700">Dato</label>
-          <input
-            type="date"
-            value={form.date}
-            onChange={(e) => setField('date', e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-          {errors.date && <p className="text-red-600 text-sm mt-1">{errors.date}</p>}
+          <h2 className="text-lg font-semibold">Registrer regi</h2>
+          <p className="text-sm text-muted">Timene sendes til regisjefen for godkjenning.</p>
         </div>
-        <div>
-          <label className="block mb-1 text-sm font-medium text-gray-700">Timer</label>
-          <input
-            type="number"
-            step="0.25"
-            value={form.hours}
-            onChange={(e) => setField('hours', e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="1.5"
+      )}
+
+      {success && (
+        <StatusMessage tone="success" onDismiss={() => setSuccess(false)}>
+          Registrert! Timene venter nå på godkjenning.
+        </StatusMessage>
+      )}
+      {errors.form && <StatusMessage tone="error">{errors.form}</StatusMessage>}
+
+      <Field label="Tittel" required error={errors.title}>
+        {(field) => (
+          <Input
+            {...field}
+            value={form.title}
+            onChange={(e) => setField('title', e.target.value)}
+            invalid={!!errors.title}
+            placeholder="F.eks. Byttet lyspærer i 2. etasje"
           />
-          {errors.hours && <p className="text-red-600 text-sm mt-1">{errors.hours}</p>}
-        </div>
+        )}
+      </Field>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Dato" required error={errors.date}>
+          {(field) => (
+            <Input
+              {...field}
+              type="date"
+              max={today()}
+              value={form.date}
+              onChange={(e) => setField('date', e.target.value)}
+              invalid={!!errors.date}
+            />
+          )}
+        </Field>
+        <Field label="Timer" required error={errors.hours}>
+          {(field) => (
+            <Input
+              {...field}
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.25"
+              value={form.hours}
+              onChange={(e) => setField('hours', e.target.value)}
+              invalid={!!errors.hours}
+              placeholder="1,5"
+            />
+          )}
+        </Field>
       </div>
 
-      <div className="mb-4">
-        <label className="block mb-1 text-sm font-medium text-gray-700">Bilder (valgfritt)</label>
-        <input
-          ref={fileInputRef}
-          id="work-log-images"
-          type="file"
-          multiple
-          accept="image/*"
-          onChange={(e) => addFiles(Array.from(e.target.files || []))}
-          className="sr-only"
-        />
+      <Field label="Arbeidets art" required error={errors.type}>
+        {(field) => (
+          <Select
+            {...field}
+            value={selectedType}
+            onChange={(e) => setField('type', e.target.value)}
+            invalid={!!errors.type}
+          >
+            {categories.length === 0 && <option value="">Laster kategorier...</option>}
+            {categories.map((category) => (
+              <option key={category.id} value={category.name}>
+                {category.name}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+
+      <Field label="Beskrivelse" required error={errors.description}>
+        {(field) => (
+          <Textarea
+            {...field}
+            value={form.description}
+            onChange={(e) => setField('description', e.target.value)}
+            invalid={!!errors.description}
+            rows={3}
+            placeholder="Hva gjorde du, og hvor?"
+          />
+        )}
+      </Field>
+
+      <div className="space-y-2">
+        <span className="block text-sm font-medium">Bilder (valgfritt)</span>
         <label
           htmlFor="work-log-images"
-          className="inline-flex cursor-pointer items-center rounded-md bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2"
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            addFiles(Array.from(event.dataTransfer.files));
+          }}
+          className={cn(
+            'flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed px-4 py-6 text-center transition-colors focus-within:ring-2 focus-within:ring-ring',
+            dragging
+              ? 'border-primary bg-primary-subtle'
+              : 'border-border-strong bg-surface-muted hover:border-primary'
+          )}
         >
-          Velg bilder
+          <ImagePlus aria-hidden="true" className="h-7 w-7 text-primary" />
+          <span className="text-sm font-medium">Ta bilde eller velg fra galleriet</span>
+          <span className="text-xs text-subtle">eller dra bilder hit · maks 20 MB per bilde</span>
+          <input
+            ref={fileInputRef}
+            id="work-log-images"
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={(e) => addFiles(Array.from(e.target.files || []))}
+            className="sr-only"
+          />
         </label>
-        {files.length > 0 && (
-          <ul className="mt-3 space-y-2">
-            {files.map((file, index) => (
+        {errors.images && <p className="text-xs font-medium text-danger">{errors.images}</p>}
+        {previews.length > 0 && (
+          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {previews.map(({ file, url }) => (
               <li
-                key={`${file.name}-${file.lastModified}`}
-                className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700"
+                key={getFileKey(file)}
+                className="relative aspect-square overflow-hidden rounded-xl border border-border bg-surface-muted"
               >
-                <span className="truncate pr-3">{file.name}</span>
+                {url ? (
+                  <img src={url} alt={file.name} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="block truncate p-2 text-xs">{file.name}</span>
+                )}
                 <button
                   type="button"
-                  onClick={() => syncFiles(files.filter((_, fileIndex) => fileIndex !== index))}
-                  className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+                  onClick={() =>
+                    setFiles((current) =>
+                      current.filter((currentFile) => getFileKey(currentFile) !== getFileKey(file))
+                    )
+                  }
+                  className="absolute right-1 top-1 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
                   aria-label={`Fjern ${file.name}`}
-                  title="Fjern bilde"
                 >
-                  <X className="h-4 w-4" />
+                  <X aria-hidden="true" className="h-4 w-4" />
                 </button>
               </li>
             ))}
@@ -231,14 +318,9 @@ const WorkLogForm: React.FC<{ onCreated?: () => void }> = ({ onCreated }) => {
         )}
       </div>
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="px-3 py-2 rounded bg-blue-600 text-white disabled:opacity-50"
-      >
-        {submitting ? 'Lagrer...' : 'Registrer'}
-      </button>
-      {errors.form && <p className="text-sm text-red-600">{errors.form}</p>}
+      <Button type="submit" size="lg" fullWidth loading={submitting}>
+        {submitting ? 'Lagrer...' : 'Registrer timer'}
+      </Button>
     </form>
   );
 };

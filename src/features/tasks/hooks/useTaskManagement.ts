@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useAuth } from '../../../app/providers/AuthContext';
 import {
   addTask,
@@ -26,7 +26,17 @@ import { useTaskManagementData } from './useTaskManagementData';
 
 type StatusMessage = { type: 'success' | 'error'; text: string };
 
-export const useTaskManagement = () => {
+type UseTaskManagementOptions = {
+  // Called after the user's own assignments change (join, leave, submit), e.g. to reload hours.
+  onAssignmentsChanged?: () => void;
+};
+
+export const useTaskManagement = ({ onAssignmentsChanged }: UseTaskManagementOptions = {}) => {
+  const onAssignmentsChangedRef = useRef(onAssignmentsChanged);
+  useLayoutEffect(() => {
+    onAssignmentsChangedRef.current = onAssignmentsChanged;
+  });
+
   const authData = useAuth();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -39,13 +49,16 @@ export const useTaskManagement = () => {
     participantNames,
     contactPeople,
     loading,
+    refreshing,
     error,
     clearError,
     loadData,
+    includeOlder,
+    showOlderTasks,
     addCategoryToState,
     updateCategoryInState,
     removeCategoryFromState,
-  } = useTaskManagementData();
+  } = useTaskManagementData(authData?.user?.id);
 
   const user = authData?.user ?? null;
   const authLoading = authData?.loading || false;
@@ -111,6 +124,7 @@ export const useTaskManagement = () => {
     try {
       await joinTask(taskId, user.id);
       await loadData();
+      onAssignmentsChangedRef.current?.();
       setSelectedTask(null);
       showSuccessMessage('Du er nå påmeldt oppgaven!');
     } catch (err) {
@@ -125,6 +139,7 @@ export const useTaskManagement = () => {
     try {
       await leaveTask(taskId, user.id);
       await loadData();
+      onAssignmentsChangedRef.current?.();
       setSelectedTask(null);
       showSuccessMessage('Du er nå avmeldt oppgaven');
     } catch (err) {
@@ -139,6 +154,7 @@ export const useTaskManagement = () => {
     try {
       await submitTaskCompletion(taskId, user.id);
       await loadData();
+      onAssignmentsChangedRef.current?.();
       setSelectedTask(null);
       showSuccessMessage('Oppgaven er sendt inn til godkjenning!');
     } catch (err) {
@@ -195,6 +211,7 @@ export const useTaskManagement = () => {
     } catch (err) {
       console.error('Error adding category:', err);
       showErrorMessage('Kunne ikke opprette kategori');
+      throw err instanceof Error ? err : new Error('Kunne ikke opprette kategori');
     }
   };
 
@@ -209,6 +226,7 @@ export const useTaskManagement = () => {
     } catch (err) {
       console.error('Error updating category:', err);
       showErrorMessage('Kunne ikke oppdatere kategori');
+      throw err instanceof Error ? err : new Error('Kunne ikke oppdatere kategori');
     }
   };
 
@@ -220,6 +238,7 @@ export const useTaskManagement = () => {
     } catch (err) {
       console.error('Error deleting category:', err);
       showErrorMessage('Kunne ikke slette kategori');
+      throw err instanceof Error ? err : new Error('Kunne ikke slette kategori');
     }
   };
 
@@ -231,8 +250,11 @@ export const useTaskManagement = () => {
     user,
     authLoading,
     loading,
+    refreshing,
     error,
     message,
+    clearMessage: () => setMessage(null),
+    tasks,
     categories,
     selectedTask,
     setSelectedTask,
@@ -246,6 +268,8 @@ export const useTaskManagement = () => {
     canDeleteTasks,
     getCategoryUsageCount,
     taskList,
+    includeOlder,
+    showOlderTasks,
     handleCreateTask,
     handleUpdateTask,
     handleJoinTask,

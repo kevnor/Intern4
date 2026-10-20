@@ -8,10 +8,24 @@ export const useTasks = (
   participantNames: Record<string, string>,
   tasksPerPage = 10
 ) => {
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState('available');
-  const [category, setCategory] = useState('all');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [query, setQueryState] = useState('');
+  const [filter, setFilterState] = useState('available');
+  const [category, setCategoryState] = useState('all');
+  const [requestedPage, setCurrentPage] = useState(1);
+
+  // Changing what is shown starts from the first page again.
+  const setQuery = (value: string) => {
+    setQueryState(value);
+    setCurrentPage(1);
+  };
+  const setFilter = (value: string) => {
+    setFilterState(value);
+    setCurrentPage(1);
+  };
+  const setCategory = (value: string) => {
+    setCategoryState(value);
+    setCurrentPage(1);
+  };
 
   const filteredTasks = useMemo(() => {
     let filtered = tasks;
@@ -45,12 +59,14 @@ export const useTasks = (
     return filtered;
   }, [tasks, query, filter, category, currentUser, participantNames]);
 
+  const totalPages = Math.ceil(filteredTasks.length / tasksPerPage);
+  // The list can shrink under the current page (e.g. after leaving a task), so clamp it.
+  const currentPage = Math.min(requestedPage, Math.max(totalPages, 1));
+
   const paginatedTasks = useMemo(() => {
     const startIndex = (currentPage - 1) * tasksPerPage;
     return filteredTasks.slice(startIndex, startIndex + tasksPerPage);
   }, [filteredTasks, currentPage, tasksPerPage]);
-
-  const totalPages = Math.ceil(filteredTasks.length / tasksPerPage);
 
   const nextPage = () => {
     if (currentPage < totalPages) {

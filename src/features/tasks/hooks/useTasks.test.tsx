@@ -117,4 +117,40 @@ describe('useTasks', () => {
     });
     expect(result.current.filteredTasks.map((entry) => entry.id)).toEqual(['submitted']);
   });
+
+  it('returns to the first page when the search or filters change', () => {
+    const tasks = Array.from({ length: 12 }, (_, index) =>
+      task({ id: String(index), title: index === 11 ? 'Spesiell oppgave' : `Oppgave ${index}` })
+    );
+    const { result } = renderHook(() => useTasks(tasks, categories, 'user', {}, 5));
+
+    act(() => result.current.nextPage());
+    act(() => result.current.nextPage());
+    expect(result.current.currentPage).toBe(3);
+
+    act(() => result.current.setQuery('spesiell'));
+    expect(result.current.currentPage).toBe(1);
+    expect(result.current.paginatedTasks.map((t) => t.id)).toEqual(['11']);
+
+    act(() => result.current.setQuery(''));
+    act(() => result.current.nextPage());
+    act(() => result.current.setCategory('Generelt'));
+    expect(result.current.currentPage).toBe(1);
+  });
+
+  it('clamps the page when the list shrinks below it', () => {
+    let tasks = Array.from({ length: 12 }, (_, index) => task({ id: String(index) }));
+    const { result, rerender } = renderHook(() => useTasks(tasks, categories, 'user', {}, 5));
+
+    act(() => result.current.nextPage());
+    act(() => result.current.nextPage());
+    expect(result.current.currentPage).toBe(3);
+
+    tasks = tasks.slice(0, 4);
+    rerender();
+
+    expect(result.current.totalPages).toBe(1);
+    expect(result.current.currentPage).toBe(1);
+    expect(result.current.paginatedTasks).toHaveLength(4);
+  });
 });

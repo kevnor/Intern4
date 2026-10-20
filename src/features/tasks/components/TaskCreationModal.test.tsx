@@ -74,7 +74,7 @@ describe('TaskCreationModal', () => {
     await user.type(screen.getByLabelText(/oppgavenavn/i), '  Ny oppgave  ');
     await user.type(screen.getByLabelText(/beskrivelse/i), '  Viktig oppgave  ');
     await user.clear(screen.getByLabelText(/timeestimat/i));
-    await user.type(screen.getByLabelText(/timeestimat/i), '2.5');
+    await user.type(screen.getByLabelText(/timeestimat/i), '3');
     await user.clear(screen.getByLabelText(/maksimalt antall deltakere/i));
     await user.type(screen.getByLabelText(/maksimalt antall deltakere/i), '4');
 
@@ -92,7 +92,7 @@ describe('TaskCreationModal', () => {
         description: 'Viktig oppgave',
         contactPersonId: '22222222-2222-4222-8222-222222222222',
         deadline: undefined,
-        hourEstimate: 2.5,
+        hourEstimate: 3,
         maxParticipants: 4,
       });
     });
@@ -156,7 +156,7 @@ describe('TaskCreationModal', () => {
         category: 'Dataarbeid',
         description: 'Eksisterende beskrivelse',
         contactPersonId: '22222222-2222-4222-8222-222222222222',
-        deadline: new Date('2026-04-12T12:00:00.000Z'),
+        deadline: new Date('2026-04-12T12:00:00'),
         hourEstimate: 2,
         maxParticipants: 3,
       });
@@ -179,13 +179,75 @@ describe('TaskCreationModal', () => {
       />
     );
 
-    const title = screen.getByRole('heading', { name: 'Opprett ny oppgave' });
-    const dialog = title.parentElement?.parentElement as HTMLElement;
+    const dialog = screen.getByRole('dialog', { name: 'Opprett ny oppgave' });
 
-    await user.click(title);
+    await user.click(screen.getByRole('heading', { name: 'Opprett ny oppgave' }));
     expect(onClose).not.toHaveBeenCalled();
 
     await user.click(dialog.parentElement as HTMLElement);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not allow fewer places than people already signed up when editing', async () => {
+    const user = userEvent.setup();
+    const onUpdateTask = vi.fn().mockResolvedValue(undefined);
+    const participant = (id: string, userId: string) => ({
+      assignmentId: id,
+      userId,
+      status: 'joined' as const,
+      joinedAt: '2026-04-10T10:00:00.000Z',
+    });
+
+    render(
+      <TaskCreationModal
+        isOpen
+        onClose={vi.fn()}
+        onCreateTask={vi.fn()}
+        onUpdateTask={onUpdateTask}
+        categories={categories}
+        currentUser={currentUser}
+        editingTask={{
+          ...editingTask,
+          participants: [
+            participant('1', '11111111-1111-4111-8111-111111111111'),
+            participant('2', '22222222-2222-4222-8222-222222222222'),
+          ],
+        }}
+        contactPeople={contactPeople}
+      />
+    );
+
+    const maxInput = screen.getByLabelText(/maksimalt antall deltakere/i);
+    await user.clear(maxInput);
+    await user.type(maxInput, '1');
+    await user.click(screen.getByRole('button', { name: /lagre endringer/i }));
+
+    expect(
+      await screen.findByText('Kan ikke være lavere enn antall påmeldte (2)')
+    ).toBeInTheDocument();
+    expect(onUpdateTask).not.toHaveBeenCalled();
+  });
+
+  it('only accepts whole hours, since the estimate is stored as an integer', async () => {
+    const user = userEvent.setup();
+    const onCreateTask = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <TaskCreationModal
+        isOpen
+        onClose={vi.fn()}
+        onCreateTask={onCreateTask}
+        categories={categories}
+        currentUser={currentUser}
+        contactPeople={contactPeople}
+      />
+    );
+
+    await user.type(screen.getByLabelText(/oppgavenavn/i), 'Halvtimes oppgave');
+    await user.type(screen.getByLabelText(/timeestimat/i), '2.5');
+    await user.click(screen.getByRole('button', { name: /opprett oppgave/i }));
+
+    expect(await screen.findByText('Timeestimat må være et helt antall timer')).toBeInTheDocument();
+    expect(onCreateTask).not.toHaveBeenCalled();
   });
 });

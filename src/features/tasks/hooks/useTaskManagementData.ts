@@ -1,52 +1,61 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getCategories } from '../../../server/dao/categoriesDAO';
 import { getTasks } from '../../../server/dao/tasksDAO';
-import { getActiveUsersWithRole, getUser } from '../../../server/dao/userDAO';
+import { getActiveUsersWithRole, getUserNames } from '../../../server/dao/userDAO';
 import { Category, Task } from '../../../shared/types/regi/tasks';
 import { ParticipantNames, TaskContactPersonOption } from '../components/types';
+import { getSemesterStart } from '../../../shared/utils/semester';
 
-export const useTaskManagementData = () => {
+export const useTaskManagementData = (userId?: string) => {
   const [tasks, setTasks] = useState<Task[]>([]);
+  // By default only this semester's and still-open tasks are loaded; see getTasks.
+  const [includeOlder, setIncludeOlder] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [participantNames, setParticipantNames] = useState<ParticipantNames>({});
   const [contactPeople, setContactPeople] = useState<TaskContactPersonOption[]>([]);
+  // `loading` covers only the first load; later reloads set `refreshing` so the page stays visible.
   const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadParticipantNames = useCallback(async (tasksData: Task[]): Promise<void> => {
-    const allParticipantIds = new Set<string>();
-    tasksData.forEach((task) => {
-      task.participants.forEach((participant) => allParticipantIds.add(participant.userId));
-      if (task.contactPersonId) {
-        allParticipantIds.add(task.contactPersonId);
+  // Names of active users come with the contact-person list; only former residents still
+  // on old tasks need a separate lookup.
+  const loadParticipantNames = useCallback(
+    async (tasksData: Task[], knownNames: ParticipantNames): Promise<void> => {
+      const allParticipantIds = new Set<string>();
+      tasksData.forEach((task) => {
+        task.participants.forEach((participant) => allParticipantIds.add(participant.userId));
+        if (task.contactPersonId) {
+          allParticipantIds.add(task.contactPersonId);
+        }
+      });
+
+      const ids = Array.from(allParticipantIds);
+      const unknownIds = ids.filter((userId) => !knownNames[userId]);
+      let names: ParticipantNames = knownNames;
+      if (unknownIds.length > 0) {
+        try {
+          names = { ...knownNames, ...(await getUserNames(unknownIds)) };
+        } catch (namesError) {
+          console.error(namesError);
+        }
       }
-    });
+      const nameMap = Object.fromEntries(
+        ids.map((userId) => [userId, names[userId] || 'Ukjent bruker'])
+      ) as ParticipantNames;
 
-    const namePromises = Array.from(allParticipantIds).map(async (userId) => {
-      try {
-        const userData = await getUser(userId);
-        return { userId, name: userData?.name || 'Ukjent bruker' };
-      } catch {
-        return { userId, name: 'Ukjent bruker' };
-      }
-    });
-
-    const names = await Promise.all(namePromises);
-    const nameMap = names.reduce((acc, { userId, name }) => {
-      acc[userId] = name;
-      return acc;
-    }, {} as ParticipantNames);
-
-    setParticipantNames(nameMap);
-  }, []);
+      setParticipantNames(nameMap);
+    },
+    []
+  );
 
   const loadData = useCallback(async (): Promise<void> => {
     try {
-      setLoading(true);
+      setRefreshing(true);
       setError(null);
 
       const [tasksData, categoriesData, activeUsers] = await Promise.all([
-        getTasks(),
+        getTasks(includeOlder ? undefined : { since: getSemesterStart(), userId }),
         getCategories(),
         getActiveUsersWithRole(),
       ]);
@@ -62,7 +71,10 @@ export const useTaskManagementData = () => {
       );
 
       if (tasksData.length > 0) {
-        await loadParticipantNames(tasksData);
+        await loadParticipantNames(
+          tasksData,
+          Object.fromEntries(activeUsers.map((activeUser) => [activeUser.id, activeUser.name]))
+        );
       } else {
         setParticipantNames({});
       }
@@ -71,14 +83,16 @@ export const useTaskManagementData = () => {
       setError('Kunne ikke laste data. Prøv å oppdatere siden.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [loadParticipantNames]);
+  }, [loadParticipantNames, includeOlder, userId]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
   const clearError = useCallback(() => setError(null), []);
+  const showOlderTasks = useCallback(() => setIncludeOlder(true), []);
 
   const sortCategories = useCallback(
     (nextCategories: Category[]): Category[] =>
@@ -130,9 +144,12 @@ export const useTaskManagementData = () => {
     participantNames,
     contactPeople,
     loading,
+    refreshing,
     error,
     clearError,
     loadData,
+    includeOlder,
+    showOlderTasks,
     addCategoryToState,
     updateCategoryInState,
     removeCategoryFromState,

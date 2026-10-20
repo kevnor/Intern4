@@ -38,9 +38,9 @@ export const ImagePreviewGrid: React.FC<ImagePreviewGridProps> = ({ paths = [], 
 
   return (
     <div className="space-y-2">
-      {title && <div className="text-sm font-medium text-gray-900">{title}</div>}
+      {title && <div className="text-sm font-medium text-fg">{title}</div>}
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-md border border-danger-border bg-danger-subtle px-3 py-2 text-sm text-danger-subtle-fg">
           {error}
         </div>
       ) : (
@@ -51,11 +51,13 @@ export const ImagePreviewGrid: React.FC<ImagePreviewGridProps> = ({ paths = [], 
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="block overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
+              className="block overflow-hidden rounded-xl border border-border bg-surface-muted"
             >
               <img
                 src={url}
                 alt={`Opplastet bilde ${index + 1}`}
+                loading="lazy"
+                decoding="async"
                 className="h-28 w-full object-cover"
               />
             </a>

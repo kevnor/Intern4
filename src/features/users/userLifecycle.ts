@@ -4,11 +4,16 @@ import { normalizePhoneNumber, validatePhoneNumber } from '../../shared/utils/ph
 
 export type UserValidationErrors = Record<string, string>;
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const isValidEmail = (value: string): boolean => EMAIL_REGEX.test(value.trim());
+
 export const createEmptyNewUserInput = (schoolId = '', studyId = ''): NewUserInput => ({
   name: '',
   email: '',
   phone: '',
-  birthDate: new Date(),
+  // Unknown until entered; a default would count as age 0 in the resident statistics.
+  birthDate: undefined,
   address: {
     street: '',
     postalCode: '',
@@ -26,6 +31,10 @@ export const createEmptyNewUserInput = (schoolId = '', studyId = ''): NewUserInp
 
 export const validateUserField = (name: string, value: unknown): UserValidationErrors => {
   const errors: UserValidationErrors = {};
+
+  if (name === 'email' && value && !isValidEmail(String(value))) {
+    errors.email = 'Ugyldig e-postadresse';
+  }
 
   if (name === 'phone' && value) {
     const phoneError = validatePhoneNumber(String(value));
@@ -73,7 +82,7 @@ export const canSubmitNewUser = (
     !options.isSubmitting &&
     options.lookupOptionsReady &&
     Boolean(userData.name.trim()) &&
-    Boolean(userData.email.trim())
+    isValidEmail(userData.email)
   );
 };
 

@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   IMAGE_BUCKET,
   IMAGE_MAX_BYTES,
+  IMAGE_MAX_SOURCE_BYTES,
+  clearSignedUrlCache,
+  createSignedImageUrls,
+  getSignedImageUrlMap,
   createImagePath,
   deleteImages,
   deleteImagesBestEffort,
@@ -32,6 +36,7 @@ vi.mock('./supabaseClient', () => ({
 describe('storage image helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearSignedUrlCache();
     uploadMock.mockResolvedValue({ data: { path: 'path' }, error: null });
     removeMock.mockResolvedValue({ data: [], error: null });
     createSignedUrlsMock.mockResolvedValue({ data: [], error: null });
@@ -45,10 +50,10 @@ describe('storage image helpers', () => {
       'text.txt er ikke et bilde.'
     );
 
-    const largeFile = new File([new Uint8Array(IMAGE_MAX_BYTES + 1)], 'large.png', {
+    const largeFile = new File([new Uint8Array(IMAGE_MAX_SOURCE_BYTES + 1)], 'large.png', {
       type: 'image/png',
     });
-    expect(() => validateImageFile(largeFile)).toThrow('large.png er større enn 5 MB.');
+    expect(() => validateImageFile(largeFile)).toThrow('large.png er større enn 20 MB.');
   });
 
   it('creates safe user-scoped paths', () => {
@@ -72,6 +77,56 @@ describe('storage image helpers', () => {
     expect(fromMock).toHaveBeenCalledWith(IMAGE_BUCKET);
     expect(uploadMock).toHaveBeenCalledTimes(2);
     expect(removeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects invalid files before uploading anything', async () => {
+    await expect(
+      uploadImages('user-1', 'regi', [
+        new File(['one'], 'one.png', { type: 'image/png' }),
+        new File(['two'], 'notes.txt', { type: 'text/plain' }),
+      ])
+    ).rejects.toThrow('notes.txt er ikke et bilde.');
+
+    expect(uploadMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects images that are still too large after shrinking', async () => {
+    // jsdom can't decode images, so the file is uploaded as-is and must fit the limit.
+    await expect(
+      uploadImages('user-1', 'regi', [
+        new File([new Uint8Array(IMAGE_MAX_BYTES + 1)], 'huge.png', { type: 'image/png' }),
+      ])
+    ).rejects.toThrow('huge.png er for stort');
+
+    expect(uploadMock).not.toHaveBeenCalled();
+  });
+
+  it('reuses signed URLs until they are about to expire', async () => {
+    createSignedUrlsMock.mockImplementation(async (paths: string[]) => ({
+      data: paths.map((path) => ({ path, signedUrl: `signed:${path}` })),
+      error: null,
+    }));
+
+    await expect(createSignedImageUrls(['a', 'b'])).resolves.toEqual(['signed:a', 'signed:b']);
+    await expect(getSignedImageUrlMap(['b', 'c'])).resolves.toEqual({
+      b: 'signed:b',
+      c: 'signed:c',
+    });
+
+    expect(createSignedUrlsMock).toHaveBeenCalledTimes(2);
+    expect(createSignedUrlsMock).toHaveBeenLastCalledWith(['c'], 3600);
+  });
+
+  it('leaves out paths that could not be signed', async () => {
+    createSignedUrlsMock.mockResolvedValue({
+      data: [
+        { path: 'gone', signedUrl: null, error: 'Object not found' },
+        { path: 'ok', signedUrl: 'signed:ok' },
+      ],
+      error: null,
+    });
+
+    await expect(getSignedImageUrlMap(['gone', 'ok'])).resolves.toEqual({ ok: 'signed:ok' });
   });
 
   it('throws when deleting images fails', async () => {

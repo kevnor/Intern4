@@ -6,7 +6,7 @@ import {
   RegiLogWithUser,
 } from '../../shared/types/regi';
 import { deleteImages } from '../storage';
-import { getUser } from './userDAO';
+import { getUserLookups } from './userDAO';
 import { formatDateColumnValue } from '../../shared/utils/date';
 import {
   getImagePaths,
@@ -73,27 +73,18 @@ async function getRegiUserMap(
     new Set(userIds.filter((id): id is string => Boolean(id)).map((id) => String(id)))
   );
 
-  const userRows = await Promise.all(
-    uniqueUserIds.map(async (uid) => {
-      try {
-        const user = await getUser(uid);
-        return {
-          uid,
-          name: user?.name ?? 'Ukjent',
-          email: user?.email ?? '',
-        };
-      } catch {
-        return { uid, name: 'Ukjent', email: '' };
-      }
-    })
-  );
+  let lookups: Record<string, RegiUserLookup> = {};
+  try {
+    lookups = await getUserLookups(uniqueUserIds);
+  } catch (error) {
+    console.error(error);
+  }
 
-  return userRows.reduce(
-    (acc, user) => {
-      acc[user.uid] = { name: user.name, email: user.email };
-      return acc;
-    },
-    {} as Record<string, RegiUserLookup>
+  return Object.fromEntries(
+    uniqueUserIds.map((uid) => [
+      uid,
+      { name: lookups[uid]?.name || 'Ukjent', email: lookups[uid]?.email ?? '' },
+    ])
   );
 }
 
@@ -252,12 +243,23 @@ export async function getPendingRegiApprovals(): Promise<PendingRegiApproval[]> 
   });
 }
 
-export async function getAllRegiLogs(): Promise<RegiLogWithUser[]> {
-  const { data, error } = await supabase
+// Registrations performed in [range.start, range.end); without a range, all of them.
+export async function getAllRegiLogs(range?: {
+  start: Date;
+  end: Date;
+}): Promise<RegiLogWithUser[]> {
+  let query = supabase
     .from('work_assignments')
     .select(
       'id, user_uuid, hours_used, created_at, performed_at, approved_state, approval_comment, approved_by_uuid, work_items(title, description, type, work_categories(name), work_misc(image_paths))'
-    )
+    );
+  if (range) {
+    query = query
+      .gte('performed_at', formatDateColumnValue(range.start))
+      .lt('performed_at', formatDateColumnValue(range.end));
+  }
+
+  const { data, error } = await query
     .order('performed_at', { ascending: false })
     .order('created_at', { ascending: false });
 
@@ -276,6 +278,22 @@ export async function getAllRegiLogs(): Promise<RegiLogWithUser[]> {
 
     return toRegiLogWithUser(row, owner, approver);
   });
+}
+
+// Date of the oldest registration, for listing which semesters have any.
+export async function getEarliestRegiDate(): Promise<Date | null> {
+  const { data, error } = await supabase
+    .from('work_assignments')
+    .select('performed_at')
+    .order('performed_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data?.performed_at) return null;
+  // A date column ("2026-10-19"); read it as a local date so it lands in the right semester.
+  const [year, month, day] = String(data.performed_at).slice(0, 10).split('-').map(Number);
+  return new Date(year, month - 1, day);
 }
 
 export async function getApprovedRegiHoursByUserSince(
@@ -306,13 +324,29 @@ export async function getApprovedRegiHoursByUserSince(
   );
 }
 
-async function setApprovalState(assignmentId: string, approvedState: 1 | 2): Promise<void> {
-  const { error } = await supabase
+export const ALREADY_PROCESSED_MESSAGE = 'Registreringen er allerede behandlet av noen andre.';
+
+// Only pending rows are updated, so two managers acting on the same row can't overwrite
+// each other's decision, and a row deleted in the meantime is reported instead of ignored.
+async function decidePendingRegiLog(
+  assignmentId: string,
+  approvedState: 1 | 2,
+  decidedByUuid: string,
+  comment?: string
+): Promise<void> {
+  const { data, error } = await supabase
     .from('work_assignments')
-    .update({ approved_state: approvedState })
-    .eq('id', Number(assignmentId));
+    .update({
+      approved_state: approvedState,
+      approved_by_uuid: decidedByUuid,
+      approval_comment: comment?.trim() ? comment.trim() : null,
+    })
+    .eq('id', Number(assignmentId))
+    .eq('approved_state', 0)
+    .select('id');
 
   if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error(ALREADY_PROCESSED_MESSAGE);
 }
 
 export async function approveRegiLog(
@@ -320,18 +354,13 @@ export async function approveRegiLog(
   approvedByUuid: string,
   approvalComment?: string
 ): Promise<void> {
-  const { error } = await supabase
-    .from('work_assignments')
-    .update({
-      approved_state: 1,
-      approved_by_uuid: approvedByUuid,
-      approval_comment: approvalComment?.trim() ? approvalComment.trim() : null,
-    })
-    .eq('id', assignmentId);
-
-  if (error) throw error;
+  await decidePendingRegiLog(assignmentId, 1, approvedByUuid, approvalComment);
 }
 
-export async function rejectRegiLog(assignmentId: string): Promise<void> {
-  await setApprovalState(assignmentId, 2);
+export async function rejectRegiLog(
+  assignmentId: string,
+  rejectedByUuid: string,
+  comment?: string
+): Promise<void> {
+  await decidePendingRegiLog(assignmentId, 2, rejectedByUuid, comment);
 }

@@ -1,15 +1,24 @@
 import React, { useState } from 'react';
-import { Ban, Calendar, Check, Clock, User, X } from 'lucide-react';
+import { Ban, Calendar, Check, Clock, User } from 'lucide-react';
 import { PendingRegiApproval } from '../../../../shared/types/regi';
-import { formatDate, formatDateTime } from '../../../../shared/utils/date';
-import { ImagePreviewGrid } from '../../../../shared/components';
+import { formatDate, formatDateTime, formatHours } from '../../../../shared/utils/date';
+import {
+  Badge,
+  Button,
+  CategoryBadge,
+  Field,
+  ImagePreviewGrid,
+  Modal,
+  Textarea,
+} from '../../../../shared/components';
 
 interface WorkApprovalModalProps {
   approval: PendingRegiApproval | null;
   onClose: () => void;
-  onApprove: (assignmentId: string, approvalComment?: string) => Promise<void>;
-  onReject: (assignmentId: string) => Promise<void>;
+  onApprove: (assignmentId: string, comment?: string) => Promise<boolean>;
+  onReject: (assignmentId: string, comment?: string) => Promise<boolean>;
   isProcessing?: boolean;
+  categoryColor?: string;
 }
 
 const WorkApprovalModal: React.FC<WorkApprovalModalProps> = ({
@@ -18,180 +27,111 @@ const WorkApprovalModal: React.FC<WorkApprovalModalProps> = ({
   onApprove,
   onReject,
   isProcessing = false,
+  categoryColor,
 }) => {
-  const [mode, setMode] = useState<'idle' | 'approve' | 'reject'>('idle');
-  const [approvalComment, setApprovalComment] = useState<string>('');
+  const [comment, setComment] = useState<string>('');
+  const [pendingAction, setPendingAction] = useState<'approve' | 'reject' | null>(null);
 
   if (!approval) return null;
 
-  const confirmApprove = async () => {
-    await onApprove(approval.id, approvalComment);
-    onClose();
+  // The list hook reports failures; the sheet only closes once the decision is saved.
+  const decide = async (action: 'approve' | 'reject') => {
+    setPendingAction(action);
+    const decided =
+      action === 'approve'
+        ? await onApprove(approval.id, comment)
+        : await onReject(approval.id, comment);
+    setPendingAction(null);
+    if (decided) onClose();
   };
 
-  const confirmReject = async () => {
-    await onReject(approval.id);
-    onClose();
-  };
+  const details = [
+    { icon: User, label: 'Beboer', value: approval.userName, sub: approval.userEmail },
+    { icon: Clock, label: 'Timer', value: formatHours(approval.hours) },
+    { icon: Calendar, label: 'Utført', value: formatDate(approval.date) },
+    { icon: Calendar, label: 'Registrert', value: formatDateTime(approval.createdAt) },
+  ];
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
-      onMouseDown={onClose}
-      role="presentation"
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      fullScreenOnMobile
+      closeOnBackdrop={!isProcessing}
+      title={approval.title || 'Godkjenn regi'}
+      description={
+        <span className="flex flex-wrap items-center gap-2">
+          <CategoryBadge name={approval.category} color={categoryColor} />
+          {approval.sourceType === 'task' ? (
+            <Badge tone="info">Oppgave</Badge>
+          ) : (
+            <Badge>Manuell registrering</Badge>
+          )}
+        </span>
+      }
+      footer={
+        <>
+          <Button
+            variant="secondary"
+            size="lg"
+            onClick={() => void decide('reject')}
+            disabled={isProcessing}
+            loading={pendingAction === 'reject'}
+            icon={<Ban aria-hidden="true" className="h-4 w-4" />}
+            className="text-danger sm:mr-auto"
+          >
+            Avslå
+          </Button>
+          <Button
+            variant="success"
+            size="lg"
+            onClick={() => void decide('approve')}
+            disabled={isProcessing}
+            loading={pendingAction === 'approve'}
+            icon={<Check aria-hidden="true" className="h-4 w-4" />}
+          >
+            Godkjenn {formatHours(approval.hours)}
+          </Button>
+        </>
+      }
     >
-      <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="space-y-1">
-            <h2 className="text-xl font-semibold text-gray-900">Godkjenn regi</h2>
-            <p className="text-sm text-gray-600">
-              {approval.sourceType === 'task' ? 'Oppgave' : 'Manuell registrering'} •{' '}
-              {approval.category}
-            </p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-gray-50 rounded-md p-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-700">
-                <User className="w-4 h-4" />
-                <span className="font-medium">Beboer</span>
-              </div>
-              <div className="mt-2 text-sm text-gray-900">
-                <div className="font-medium">{approval.userName}</div>
-                {approval.userEmail && <div className="text-gray-600">{approval.userEmail}</div>}
+      <div className="space-y-6">
+        <dl className="grid grid-cols-2 gap-3 rounded-2xl bg-surface-muted p-4">
+          {details.map(({ icon: Icon, label, value, sub }) => (
+            <div key={label} className="flex min-w-0 items-start gap-3">
+              <Icon aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-subtle" />
+              <div className="min-w-0">
+                <dt className="text-xs font-medium text-muted">{label}</dt>
+                <dd className="text-sm">{value}</dd>
+                {sub && <dd className="truncate text-xs text-subtle">{sub}</dd>}
               </div>
             </div>
+          ))}
+        </dl>
 
-            <div className="bg-gray-50 rounded-md p-4 space-y-2">
-              <div className="flex items-center space-x-2 text-sm text-gray-700">
-                <Clock className="w-4 h-4" />
-                <span className="font-medium">Timer</span>
-                <span className="text-gray-900">{approval.hours.toFixed(2)} t</span>
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-gray-700">
-                <Calendar className="w-4 h-4" />
-                <span className="font-medium">Utført</span>
-                <span className="text-gray-900">{formatDate(approval.date)}</span>
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-gray-700">
-                <Calendar className="w-4 h-4" />
-                <span className="font-medium">Registrert</span>
-                <span className="text-gray-900">{formatDateTime(approval.createdAt)}</span>
-              </div>
-            </div>
-          </div>
+        <section>
+          <h3 className="mb-2 text-sm font-semibold">Beskrivelse</h3>
+          <p className="whitespace-pre-wrap text-sm text-muted">
+            {approval.description || 'Ingen beskrivelse.'}
+          </p>
+        </section>
 
-          <div className="space-y-2">
-            <div className="text-sm font-medium text-gray-900">Tittel</div>
-            <div className="text-sm text-gray-800">{approval.title || '-'}</div>
-          </div>
+        <ImagePreviewGrid paths={approval.imagePaths} title="Bilder" />
 
-          <div className="space-y-2">
-            <div className="text-sm font-medium text-gray-900">Beskrivelse</div>
-            <div className="text-sm text-gray-800 whitespace-pre-wrap">
-              {approval.description || 'Ingen beskrivelse.'}
-            </div>
-          </div>
-
-          <ImagePreviewGrid paths={approval.imagePaths} title="Bilder" />
-        </div>
-
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
-          {mode === 'idle' && (
-            <div className="flex justify-between items-center">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Lukk
-              </button>
-              <div className="flex space-x-3">
-                <button
-                  disabled={isProcessing}
-                  onClick={() => setMode('reject')}
-                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
-                >
-                  <Ban className="w-4 h-4 mr-2" />
-                  Avvis
-                </button>
-                <button
-                  disabled={isProcessing}
-                  onClick={() => setMode('approve')}
-                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50"
-                >
-                  <Check className="w-4 h-4 mr-2" />
-                  Godkjenn
-                </button>
-              </div>
-            </div>
+        <Field label="Kommentar til beboeren" hint="Valgfritt. Vises i beboerens regilogg.">
+          {(field) => (
+            <Textarea
+              {...field}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={2}
+              placeholder="F.eks. «Bra jobba!» eller hvorfor timene avslås"
+            />
           )}
-
-          {mode === 'approve' && (
-            <div className="space-y-3">
-              <p className="text-sm text-gray-700">Godkjenn denne registreringen?</p>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Kommentar (valgfritt)
-                </label>
-                <textarea
-                  value={approvalComment}
-                  onChange={(e) => setApprovalComment(e.target.value)}
-                  rows={3}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="F.eks. 'OK, ser bra ut.'"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setMode('idle')}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Avbryt
-                </button>
-                <button
-                  disabled={isProcessing}
-                  onClick={confirmApprove}
-                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50"
-                >
-                  Godkjenn
-                </button>
-              </div>
-            </div>
-          )}
-
-          {mode === 'reject' && (
-            <div className="space-y-3">
-              <p className="text-sm text-gray-700">Avvis denne registreringen?</p>
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setMode('idle')}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Avbryt
-                </button>
-                <button
-                  disabled={isProcessing}
-                  onClick={confirmReject}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
-                >
-                  Avvis
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        </Field>
       </div>
-    </div>
+    </Modal>
   );
 };
 

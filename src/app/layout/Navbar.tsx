@@ -1,206 +1,147 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
+import { ChevronDown, LogOut, UserCircle } from 'lucide-react';
 import { useAuth } from '../providers/AuthContext';
 import DropdownMenu from './DropdownMenu';
-import { ChevronDown, Menu, UserCircle, X } from 'lucide-react';
+import { ThemeSelector, ThemeToggleButton } from './ThemeSelector';
+import { useVisibleNavigation } from './useVisibleNavigation';
 import { logOut } from '../../server/dao/authentication';
-import { appNavigation } from './navigation';
-import type { FeatureNavItem } from '../../shared/types/feature';
 import { APP_ROUTES } from '../constants/appRoutes';
 import { AUTH_PATHS } from '../../features/auth/paths';
 import { USER_PATHS } from '../../features/users/paths';
+import { cn } from '../../shared/utils/cn';
+
+export const BrandMark = ({ className }: { className?: string }) => (
+  <span className={cn('flex items-center gap-2.5', className)}>
+    <span
+      aria-hidden="true"
+      className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15 font-serif text-lg font-bold ring-1 ring-white/25"
+    >
+      S
+    </span>
+    <span className="text-lg font-semibold tracking-tight">Internsiden</span>
+  </span>
+);
 
 const Navbar = () => {
   const { user } = useAuth();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const visibleItems = useVisibleNavigation();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const toggleSection = (key: string) =>
-    setOpenSections((sections) => ({
-      ...sections,
-      [key]: !sections[key],
-    }));
-
   const handleLogout = async () => {
     await logOut();
-    setMobileOpen(false);
     setUserMenuOpen(false);
   };
 
   useEffect(() => {
-    const handler = (event: MouseEvent) => {
+    const handleClickOutside = (event: MouseEvent) => {
       const target = event.target;
 
       if (userMenuRef.current && target instanceof Node && !userMenuRef.current.contains(target)) {
         setUserMenuOpen(false);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const canAccess = (item: Pick<FeatureNavItem, 'canAccess'>) =>
-    item.canAccess ? item.canAccess({ user }) : true;
-
-  const visibleItems = appNavigation.reduce<FeatureNavItem[]>((items, item) => {
-    if (item.children) {
-      const visibleChildren = item.children.filter((child) => canAccess(child));
-      if (!canAccess(item) || visibleChildren.length === 0) {
-        return items;
-      }
-
-      items.push({ ...item, children: visibleChildren });
-      return items;
-    }
-
-    if (canAccess(item)) {
-      items.push(item);
-    }
-
-    return items;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setUserMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, []);
 
   return (
-    <nav className="relative z-40 bg-white shadow px-8 py-2 flex justify-between items-center">
-      <div className="text-xl font-semibold">
-        <Link to={APP_ROUTES.HOME}>Internsiden</Link>
-      </div>
+    <nav className="sticky top-0 z-40 bg-header pt-[env(safe-area-inset-top)] text-header-fg shadow-sm">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <Link to={APP_ROUTES.HOME} className="rounded-lg">
+          <BrandMark />
+        </Link>
 
-      {user && (
-        <button
-          onClick={() => setMobileOpen((o) => !o)}
-          className="md:hidden p-2"
-          aria-label="Toggle menu"
-        >
-          {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
-      )}
-
-      <div className="hidden md:flex items-center space-x-6">
         {user ? (
           <>
-            {visibleItems.map((item) =>
-              item.children ? (
-                <DropdownMenu key={item.key} label={item.label} items={item.children} />
-              ) : (
-                <Link key={item.key} to={item.to} className="hover:text-blue-500">
-                  {item.label}
-                </Link>
-              )
-            )}
+            {/* On phones the bottom tab bar handles navigation. */}
+            <ThemeToggleButton className="md:hidden" />
 
-            <div className="relative" ref={userMenuRef}>
-              <button
-                onClick={() => setUserMenuOpen((o) => !o)}
-                className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100"
-              >
-                <div className="flex items-center gap-2 text-left">
-                  <UserCircle className="w-6 h-6 text-gray-600" />
-                  <div className="text-sm leading-tight">
-                    <div className="font-semibold text-gray-900 truncate max-w-[140px]">
-                      {user.name || 'Bruker'}
+            <div className="hidden items-center gap-1 md:flex">
+              {visibleItems.map((item) =>
+                item.children ? (
+                  <DropdownMenu key={item.key} label={item.label} items={item.children} />
+                ) : (
+                  <NavLink
+                    key={item.key}
+                    to={item.to}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex h-10 items-center rounded-lg px-3 text-sm font-medium hover:bg-header-hover',
+                        isActive && 'bg-header-hover'
+                      )
+                    }
+                  >
+                    {item.label}
+                  </NavLink>
+                )
+              )}
+
+              <div className="relative ml-2" ref={userMenuRef}>
+                <button
+                  onClick={() => setUserMenuOpen((open) => !open)}
+                  aria-expanded={userMenuOpen}
+                  aria-haspopup="true"
+                  className="flex h-10 items-center gap-2 rounded-lg px-2 hover:bg-header-hover"
+                >
+                  <UserCircle aria-hidden="true" className="h-6 w-6" />
+                  <span className="max-w-[140px] truncate text-sm font-semibold">
+                    {user.name || 'Bruker'}
+                  </span>
+                  <ChevronDown aria-hidden="true" className="h-4 w-4" />
+                </button>
+
+                {userMenuOpen && (
+                  <div className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-xl border border-border bg-surface-raised text-fg shadow-lg">
+                    <div className="border-b border-border px-4 py-3">
+                      <div className="truncate text-sm font-semibold">{user.name || 'Bruker'}</div>
+                      <div className="truncate text-xs text-muted">{user.email || ''}</div>
+                    </div>
+                    <div className="p-1">
+                      <Link
+                        to={USER_PATHS.PROFILE}
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-surface-muted"
+                      >
+                        <UserCircle aria-hidden="true" className="h-4 w-4 text-muted" />
+                        Profil
+                      </Link>
+                    </div>
+                    <div className="border-t border-border px-3 py-3">
+                      <p className="mb-2 text-xs font-medium text-muted">Utseende</p>
+                      <ThemeSelector />
+                    </div>
+                    <div className="border-t border-border p-1">
+                      <button
+                        onClick={handleLogout}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-danger-subtle"
+                      >
+                        <LogOut aria-hidden="true" className="h-4 w-4" />
+                        Logg ut
+                      </button>
                     </div>
                   </div>
-                </div>
-                <ChevronDown className="w-4 h-4 text-gray-600" />
-              </button>
-
-              {userMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
-                  <Link
-                    to={USER_PATHS.PROFILE}
-                    onClick={() => setUserMenuOpen(false)}
-                    className="block px-4 py-2 text-sm hover:bg-gray-100"
-                  >
-                    Profil
-                  </Link>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                  >
-                    Logg ut
-                  </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </>
         ) : (
-          <Link to={AUTH_PATHS.LOGIN} className="hover:text-blue-500">
+          <Link
+            to={AUTH_PATHS.LOGIN}
+            className="flex h-10 items-center rounded-lg px-3 text-sm font-medium hover:bg-header-hover"
+          >
             Logg inn
           </Link>
         )}
       </div>
-
-      {user && mobileOpen && (
-        <div className="absolute top-full inset-x-0 z-50 bg-white shadow-md p-4 md:hidden">
-          <ul className="space-y-2">
-            {visibleItems.map((item) => (
-              <li key={item.key}>
-                {item.children ? (
-                  <>
-                    <button
-                      onClick={() => toggleSection(item.key)}
-                      className="w-full flex justify-between items-center py-2"
-                    >
-                      {item.label}
-                      <ChevronDown
-                        className={`w-5 h-5 transform transition-transform ${
-                          openSections[item.key] ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </button>
-                    {openSections[item.key] && (
-                      <ul className="pl-4 space-y-1">
-                        {item.children.map((child) => (
-                          <li key={child.to}>
-                            <Link
-                              to={child.to}
-                              onClick={() => setMobileOpen(false)}
-                              className="block py-1"
-                            >
-                              {child.label}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </>
-                ) : (
-                  <Link to={item.to} onClick={() => setMobileOpen(false)} className="block py-2">
-                    {item.label}
-                  </Link>
-                )}
-              </li>
-            ))}
-
-            <li>
-              <button onClick={handleLogout} className="w-full text-left py-2">
-                Logg ut
-              </button>
-            </li>
-          </ul>
-          <div className="border-t border-gray-200 pt-3 mt-3 text-sm text-gray-700">
-            <div className="mb-2">
-              <div className="font-semibold">{user.name || 'Bruker'}</div>
-              <div className="text-gray-500">{user.email || ''}</div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link
-                to={USER_PATHS.PROFILE}
-                onClick={() => setMobileOpen(false)}
-                className="text-blue-600"
-              >
-                Profil
-              </Link>
-              <button onClick={handleLogout} className="text-left text-red-600">
-                Logg ut
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </nav>
   );
 };

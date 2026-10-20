@@ -5,6 +5,7 @@ import {
   getSchools,
   getStudies,
   getUser,
+  reactivateUser,
   updateUser,
 } from './userDAO';
 import { supabase } from '../supabaseClient';
@@ -89,6 +90,7 @@ describe('userDAO resident directory', () => {
         'created_at',
         'is_active',
         'on_leave',
+        'profile_picture',
         'roles(name)',
       ].join(', ')
     );
@@ -201,7 +203,7 @@ describe('userDAO profile and lookup writes', () => {
 
     const result = await getUser('11111111-1111-1111-1111-111111111111');
 
-    expect(builder.select).toHaveBeenCalledWith('*, schools(name), studies(name)');
+    expect(builder.select).toHaveBeenCalledWith('*, schools(name), studies(name), roles(name)');
     expect(result).toMatchObject({
       schoolId: 'school-ntnu',
       studyId: 'study-data',
@@ -214,9 +216,11 @@ describe('userDAO profile and lookup writes', () => {
     const builder: {
       update: MockFn;
       eq: MockFn;
+      select: MockFn;
     } = {
       update: mockFn(() => builder),
-      eq: mockFn(async () => ({ error: null })),
+      eq: mockFn(() => builder),
+      select: mockFn(async () => ({ data: [{ id: '1' }], error: null })),
     };
 
     vi.mocked(supabase.from).mockImplementationOnce(() => asSupabaseBuilder(builder));
@@ -234,6 +238,55 @@ describe('userDAO profile and lookup writes', () => {
       study_id: 'study-okad',
     });
     expect(builder.eq).toHaveBeenCalledWith('id', '11111111-1111-1111-1111-111111111111');
+  });
+
+  it('reports when an update was blocked instead of pretending it saved', async () => {
+    const builder: { update: MockFn; eq: MockFn; select: MockFn } = {
+      update: mockFn(() => builder),
+      eq: mockFn(() => builder),
+      select: mockFn(async () => ({ data: [], error: null })),
+    };
+    vi.mocked(supabase.from).mockImplementationOnce(() => asSupabaseBuilder(builder));
+
+    await expect(updateUser('someone-else', { roomNumber: 101 })).rejects.toThrow(
+      'Du har ikke tilgang til å endre denne beboeren.'
+    );
+  });
+
+  it('shows the database guard message for forbidden field changes', async () => {
+    const builder: { update: MockFn; eq: MockFn; select: MockFn } = {
+      update: mockFn(() => builder),
+      eq: mockFn(() => builder),
+      select: mockFn(async () => ({
+        data: null,
+        error: { code: '42501', message: 'Kun Admin og Data kan endre roller' },
+      })),
+    };
+    vi.mocked(supabase.from).mockImplementationOnce(() => asSupabaseBuilder(builder));
+
+    await expect(updateUser('someone', { roleId: '3' })).rejects.toThrow(
+      'Kun Admin og Data kan endre roller'
+    );
+    expect(builder.update).toHaveBeenCalledWith({ role_id: 3 });
+  });
+
+  it('shows the edge function’s own message when it refuses', async () => {
+    vi.mocked(supabase.functions.invoke).mockResolvedValue({
+      data: null,
+      error: {
+        message: 'Edge Function returned a non-2xx status code',
+        context: new Response('Brukeren har ingen innlogging lenger – opprett brukeren på nytt.', {
+          status: 409,
+        }),
+      },
+    } as never);
+
+    await expect(reactivateUser('old-user')).rejects.toThrow(
+      'Brukeren har ingen innlogging lenger – opprett brukeren på nytt.'
+    );
+    expect(supabase.functions.invoke).toHaveBeenCalledWith('reactivate-user', {
+      body: { userId: 'old-user' },
+    });
   });
 
   it('passes lookup ids to the create-user function', async () => {

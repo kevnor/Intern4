@@ -9,6 +9,11 @@ export async function logIn(email: string, password: string): Promise<LoginResul
   try {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
+    // Deactivated users have a banned login (see the delete-user edge function).
+    if (error?.message?.toLowerCase().includes('banned')) {
+      return { success: false, error: 'Kontoen er deaktivert. Kontakt romsjef eller Data.' };
+    }
+
     if (error || !data.user || !data.session) {
       return {
         success: false,

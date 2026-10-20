@@ -40,4 +40,13 @@ describe('userLifecycle', () => {
       true
     );
   });
+
+  it('starts without a birth date and validates email addresses', () => {
+    expect(createEmptyNewUserInput().birthDate).toBeUndefined();
+    expect(validateUserField('email', 'ola@example.test')).toEqual({});
+    expect(validateUserField('email', 'ola@example')).toEqual({ email: 'Ugyldig e-postadresse' });
+
+    const user = { ...createEmptyNewUserInput(), name: 'Ola', email: 'ikke-en-epost' };
+    expect(canSubmitNewUser(user, { isSubmitting: false, lookupOptionsReady: true })).toBe(false);
+  });
 });

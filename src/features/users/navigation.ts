@@ -1,22 +1,5 @@
-import type { FeatureNavItem, PermissionCheck } from '../../shared/types/feature';
-import { canAccessRoomManagement } from './permissions';
-import { USER_PATHS } from './paths';
+import type { FeatureNavItem } from '../../shared/types/feature';
 
-const canAccessRoomManagementItem: PermissionCheck = ({ user }) =>
-  canAccessRoomManagement(user?.role);
-
-export const userNavigation: FeatureNavItem[] = [
-  {
-    key: 'rom',
-    label: 'Rom',
-    canAccess: canAccessRoomManagementItem,
-    children: [
-      {
-        key: 'manage-users',
-        label: 'Administrer brukere',
-        to: USER_PATHS.LEGG_TIL_BEBOER,
-        canAccess: canAccessRoomManagementItem,
-      },
-    ],
-  },
-];
+// User administration lives in Beboere now. The "Rom" menu returns with room
+// administration and romslipp.
+export const userNavigation: FeatureNavItem[] = [];

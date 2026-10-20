@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../../../server/supabaseClient';
 import { resetPassword } from '../../../server/dao/authentication';
 import { AUTH_PATHS } from '../paths';
-import { TASK_PATHS } from '../../tasks/paths';
+import { APP_ROUTES } from '../../../app/constants/appRoutes';
 import { useAuth } from '../../../app/providers/AuthContext';
+import { Button, Field, PasswordInput, Spinner, StatusMessage } from '../../../shared/components';
 
 const ResetPasswordForm = () => {
   const navigate = useNavigate();
@@ -16,8 +16,6 @@ const ResetPasswordForm = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exchanging, setExchanging] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     const handleTokenExchange = async () => {
@@ -48,16 +46,24 @@ const ResetPasswordForm = () => {
   const stillLoading = exchanging || authLoading;
 
   if (stillLoading) {
-    return <p className="text-gray-600">Verifiserer lenke...</p>;
+    return (
+      <p className="flex items-center gap-2 text-muted">
+        <Spinner label="Verifiserer lenke..." />
+        Verifiserer lenke...
+      </p>
+    );
   }
 
   if (!sessionReady) {
     return (
-      <div>
-        <p className="text-red-500 mb-4">
-          {error || 'Lenken er ugyldig eller utløpt. Vennligst be om en ny tilbakestillingslenke.'}
-        </p>
-        <Link to={AUTH_PATHS.FORGOT_PASSWORD} className="text-sm text-blue-600 hover:underline">
+      <div className="space-y-4">
+        <StatusMessage tone="error">
+          {error || 'Lenken er ugyldig eller utløpt. Be om en ny tilbakestillingslenke.'}
+        </StatusMessage>
+        <Link
+          to={AUTH_PATHS.FORGOT_PASSWORD}
+          className="text-sm font-medium text-primary hover:underline"
+        >
           Be om ny lenke
         </Link>
       </div>
@@ -89,64 +95,46 @@ const ResetPasswordForm = () => {
       return;
     }
 
-    navigate(TASK_PATHS.DASHBOARD);
+    navigate(APP_ROUTES.HOME);
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      {error && <div className="text-red-500 mb-4">{error}</div>}
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      {error && <StatusMessage tone="error">{error}</StatusMessage>}
 
-      <div className="mb-4">
-        <label className="block mb-1">Nytt passord</label>
-        <div className="relative">
-          <input
-            type={showPassword ? 'text' : 'password'}
+      <Field label="Nytt passord" hint="Minst 6 tegn.">
+        {(field) => (
+          <PasswordInput
+            {...field}
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading}
-            placeholder="nytt passord"
-            className="w-full border border-gray-300 rounded px-3 py-2 pr-10 disabled:opacity-50"
           />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-            tabIndex={-1}
-          >
-            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
-        </div>
-      </div>
+        )}
+      </Field>
 
-      <div className="mb-6">
-        <label className="block mb-1">Bekreft passord</label>
-        <div className="relative">
-          <input
-            type={showConfirmPassword ? 'text' : 'password'}
+      <Field label="Bekreft passord">
+        {(field) => (
+          <PasswordInput
+            {...field}
+            autoComplete="new-password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             disabled={loading}
-            placeholder="bekreft passord"
-            className="w-full border border-gray-300 rounded px-3 py-2 pr-10 disabled:opacity-50"
           />
-          <button
-            type="button"
-            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-            tabIndex={-1}
-          >
-            {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
-        </div>
-      </div>
+        )}
+      </Field>
 
-      <button
+      <Button
         type="submit"
-        disabled={loading || !password || !confirmPassword}
-        className="w-full py-2 rounded bg-blue-600 text-white disabled:opacity-50"
+        size="lg"
+        fullWidth
+        loading={loading}
+        disabled={!password || !confirmPassword}
       >
-        {loading ? 'Oppdaterer...' : 'Oppdater passord'}
-      </button>
+        Oppdater passord
+      </Button>
     </form>
   );
 };

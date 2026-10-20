@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Navbar from './Navbar';
+import { ThemeProvider } from '../providers/ThemeProvider';
 
 const mockUseAuth = vi.fn();
 const mockLogOut = vi.fn();
@@ -15,6 +16,15 @@ vi.mock('../../server/dao/authentication', () => ({
   logOut: (...args: unknown[]) => mockLogOut(...args),
 }));
 
+const renderNavbar = () =>
+  render(
+    <ThemeProvider>
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>
+    </ThemeProvider>
+  );
+
 describe('Navbar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -23,11 +33,7 @@ describe('Navbar', () => {
   it('shows the login link when there is no authenticated user', () => {
     mockUseAuth.mockReturnValue({ user: null });
 
-    render(
-      <MemoryRouter>
-        <Navbar />
-      </MemoryRouter>
-    );
+    renderNavbar();
 
     expect(screen.getByRole('link', { name: 'Logg inn' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /toggle menu/i })).not.toBeInTheDocument();
@@ -45,19 +51,16 @@ describe('Navbar', () => {
     });
     mockLogOut.mockResolvedValue(undefined);
 
-    render(
-      <MemoryRouter>
-        <Navbar />
-      </MemoryRouter>
-    );
+    renderNavbar();
 
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Hjem' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'Beboere' })).toHaveAttribute('href', '/beboere');
-    expect(screen.getByRole('button', { name: /regi/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Regi' })).toHaveAttribute('href', '/regi');
     expect(screen.getByRole('link', { name: 'Admin' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /data bruker/i }));
     expect(screen.getByRole('link', { name: 'Profil' })).toHaveAttribute('href', '/profil');
+    expect(screen.getByRole('radiogroup', { name: 'Utseende' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Logg ut' }));
 
     await waitFor(() => {
@@ -75,14 +78,10 @@ describe('Navbar', () => {
       },
     });
 
-    render(
-      <MemoryRouter>
-        <Navbar />
-      </MemoryRouter>
-    );
+    renderNavbar();
 
     expect(screen.queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Beboere' })).toHaveAttribute('href', '/beboere');
-    expect(screen.getByRole('button', { name: /regi/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Regi' })).toHaveAttribute('href', '/regi');
   });
 });

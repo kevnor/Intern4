@@ -1,11 +1,22 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Edit2, Palette, Plus, Search, Trash2, X } from 'lucide-react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
+import { Check, Edit2, Plus, Trash2 } from 'lucide-react';
+import {
+  Button,
+  ConfirmDialog,
+  Field,
+  Input,
+  Modal,
+  SearchInput,
+  Spinner,
+  StatusMessage,
+  Textarea,
+} from '../../../shared/components';
 import {
   Category,
   CategoryCreationData,
   CategoryFormData,
 } from '../../../shared/types/regi/tasks/category.types';
+import { cn } from '../../../shared/utils/cn';
 
 type FormErrors = Record<string, string>;
 
@@ -14,24 +25,24 @@ type CategoryManagementProps = {
   onAddCategory: (categoryData: CategoryCreationData) => Promise<void>;
   onUpdateCategory: (categoryId: string, categoryData: Partial<Category>) => Promise<void>;
   onDeleteCategory: (categoryId: string) => Promise<void>;
-  getCategoryUsage: (categoryName: string) => Promise<number>;
+  getCategoryUsage: (categoryId: string) => Promise<number>;
   onClose: () => void;
 };
 
-const DEFAULT_COLOR = '#3B82F6';
-
-const predefinedColors: string[] = [
-  '#3B82F6',
-  '#10B981',
-  '#F59E0B',
-  '#EF4444',
-  '#8B5CF6',
-  '#F97316',
-  '#06B6D4',
-  '#84CC16',
-  '#EC4899',
-  '#6B7280',
+// Chosen to stay distinguishable from each other and readable as dots in both themes.
+const PRESET_COLORS: { value: string; name: string }[] = [
+  { value: '#8B1E3F', name: 'Burgunder' },
+  { value: '#0F766E', name: 'Petrol' },
+  { value: '#D97706', name: 'Rav' },
+  { value: '#4F46E5', name: 'Indigo' },
+  { value: '#BE185D', name: 'Rosa' },
+  { value: '#15803D', name: 'Grønn' },
+  { value: '#0369A1', name: 'Blå' },
+  { value: '#57534E', name: 'Grå' },
 ];
+const DEFAULT_COLOR = PRESET_COLORS[0].value;
+
+type UsageState = { counts: Record<string, number>; failed: Set<string>; loading: boolean };
 
 const CategoryManagement: React.FC<CategoryManagementProps> = ({
   categories,
@@ -41,6 +52,7 @@ const CategoryManagement: React.FC<CategoryManagementProps> = ({
   getCategoryUsage,
   onClose,
 }) => {
+  const formId = useId();
   const [isAddingCategory, setIsAddingCategory] = useState<boolean>(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [formData, setFormData] = useState<CategoryFormData>({
@@ -49,49 +61,39 @@ const CategoryManagement: React.FC<CategoryManagementProps> = ({
     color: DEFAULT_COLOR,
   });
   const [errors, setErrors] = useState<FormErrors>({});
-  const [usageCounts, setUsageCounts] = useState<{ [key: string]: number }>({});
-  const [loadingUsage, setLoadingUsage] = useState<boolean>(true);
+  const [saving, setSaving] = useState(false);
+  const [usage, setUsage] = useState<UsageState>({
+    counts: {},
+    failed: new Set(),
+    loading: true,
+  });
   const [query, setQuery] = useState<string>('');
-  const hasLoadedUsageCounts = useRef(false);
+  const [pendingDelete, setPendingDelete] = useState<Category | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let isCurrent = true;
 
-    const loadAllUsageCounts = async () => {
-      setLoadingUsage(!hasLoadedUsageCounts.current);
-      const counts: { [key: string]: number } = {};
-
-      try {
-        await Promise.all(
-          categories.map(async (category) => {
-            try {
-              counts[category.name] = await getCategoryUsage(category.name);
-            } catch (error) {
-              console.error(`Error loading usage for category ${category.name}:`, error);
-              counts[category.name] = 0;
-            }
-          })
-        );
-        if (isCurrent) {
-          setUsageCounts(counts);
-          hasLoadedUsageCounts.current = true;
+    void Promise.all(
+      categories.map(async (category) => {
+        try {
+          return { id: category.id, count: await getCategoryUsage(category.id) };
+        } catch (error) {
+          console.error(`Error loading usage for category ${category.name}:`, error);
+          return { id: category.id, count: null };
         }
-      } catch (error) {
-        console.error('Error loading category usage counts:', error);
-      } finally {
-        if (isCurrent) {
-          setLoadingUsage(false);
-        }
-      }
-    };
-
-    if (categories.length > 0) {
-      void loadAllUsageCounts();
-    } else {
-      setUsageCounts({});
-      hasLoadedUsageCounts.current = true;
-      setLoadingUsage(false);
-    }
+      })
+    ).then((results) => {
+      if (!isCurrent) return;
+      const counts: Record<string, number> = {};
+      const failed = new Set<string>();
+      results.forEach(({ id, count }) => {
+        if (count === null) failed.add(id);
+        else counts[id] = count;
+      });
+      setUsage({ counts, failed, loading: false });
+    });
 
     return () => {
       isCurrent = false;
@@ -167,6 +169,7 @@ const CategoryManagement: React.FC<CategoryManagementProps> = ({
       return;
     }
 
+    setSaving(true);
     try {
       if (editingCategory) {
         await onUpdateCategory(editingCategory.id, {
@@ -186,27 +189,45 @@ const CategoryManagement: React.FC<CategoryManagementProps> = ({
     } catch (error) {
       console.error('Error saving category:', error);
       setErrors({ submit: 'Kunne ikke lagre kategori. Prøv igjen.' });
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDelete = async (category: Category): Promise<void> => {
-    if (!window.confirm(`Er du sikker på at du vil slette kategorien "${category.name}"?`)) {
+  const requestDelete = (category: Category): void => {
+    setNotice(null);
+
+    if (usage.failed.has(category.id)) {
+      setNotice(
+        `Kunne ikke sjekke om kategorien «${category.name}» er i bruk, så den kan ikke slettes nå. Prøv igjen senere.`
+      );
       return;
     }
 
-    try {
-      const usage = usageCounts[category.name] || 0;
-      if (usage > 0) {
-        alert(
-          `Kan ikke slette kategorien "${category.name}" fordi den brukes av ${usage} oppgave${usage !== 1 ? 'r' : ''}.`
-        );
-        return;
-      }
+    const count = usage.counts[category.id] ?? 0;
+    if (count > 0) {
+      setNotice(
+        `Kan ikke slette kategorien «${category.name}» fordi den brukes av ${count} oppgave${count !== 1 ? 'r' : ''}.`
+      );
+      return;
+    }
 
-      await onDeleteCategory(category.id);
+    setPendingDelete(category);
+  };
+
+  const confirmDelete = async (): Promise<void> => {
+    if (!pendingDelete) return;
+
+    setDeleting(true);
+    try {
+      await onDeleteCategory(pendingDelete.id);
+      setPendingDelete(null);
     } catch (error) {
       console.error('Error deleting category:', error);
-      alert('Kunne ikke slette kategori. Prøv igjen.');
+      setPendingDelete(null);
+      setNotice('Kunne ikke slette kategori. Prøv igjen.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -219,279 +240,205 @@ const CategoryManagement: React.FC<CategoryManagementProps> = ({
   };
 
   const isFormOpen = isAddingCategory || !!editingCategory;
+  const isPresetColor = PRESET_COLORS.some(
+    (color) => color.value.toLowerCase() === formData.color.toLowerCase()
+  );
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4"
-      onMouseDown={onClose}
-      role="presentation"
-    >
-      <div className="flex min-h-full items-center justify-center">
-        <div
-          className="relative flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-xl"
-          role="dialog"
-          aria-modal={!isFormOpen}
-          aria-hidden={isFormOpen || undefined}
-          aria-labelledby="category-management-title"
-          onMouseDown={(event) => event.stopPropagation()}
-        >
-          <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-5 py-4">
-            <h2 id="category-management-title" className="text-xl font-semibold text-gray-900">
-              Kategorier
-            </h2>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={startAdd}
-                className="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Ny kategori
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md p-2 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                aria-label="Lukk kategorier"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+  return (
+    <>
+      <Modal open onClose={onClose} title="Kategorier" size="lg" fullScreenOnMobile>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Søk i kategorier..."
+              label="Søk i kategorier"
+              className="flex-1"
+            />
+            <Button icon={<Plus aria-hidden="true" className="h-4 w-4" />} onClick={startAdd}>
+              Ny kategori
+            </Button>
           </div>
 
-          <div className="border-b border-gray-200 px-5 py-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="w-full rounded-md border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Søk i kategorier..."
-              />
+          {notice && (
+            <StatusMessage tone="error" onDismiss={() => setNotice(null)}>
+              {notice}
+            </StatusMessage>
+          )}
+
+          {usage.loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-subtle">
+              <Spinner label="Laster kategorier..." />
+              Laster kategorier...
             </div>
-          </div>
+          ) : categories.length === 0 ? (
+            <p className="py-8 text-center text-sm text-subtle">Ingen kategorier opprettet</p>
+          ) : filteredCategories.length === 0 ? (
+            <p className="py-8 text-center text-sm text-subtle">Ingen kategorier matcher søket</p>
+          ) : (
+            <ul className="divide-y divide-border rounded-2xl border border-border">
+              {filteredCategories.map((category) => {
+                const count = usage.counts[category.id];
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {loadingUsage ? (
-              <div className="px-6 py-8 text-center">
-                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
-                <p className="mt-2 text-sm text-gray-500">Laster kategorier...</p>
-              </div>
-            ) : (
-              <ul className="divide-y divide-gray-200">
-                {categories.length === 0 ? (
-                  <li className="px-5 py-8 text-center text-sm text-gray-500">
-                    Ingen kategorier opprettet
-                  </li>
-                ) : filteredCategories.length === 0 ? (
-                  <li className="px-5 py-8 text-center text-sm text-gray-500">
-                    Ingen kategorier matcher søket
-                  </li>
-                ) : (
-                  filteredCategories.map((category) => {
-                    const usage = usageCounts[category.name] || 0;
-
-                    return (
-                      <li key={category.id} className="px-5 py-2">
-                        <div className="flex min-w-0 items-center justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div
-                              className="h-4 w-4 shrink-0 rounded-full border border-gray-300"
-                              style={{ backgroundColor: category.color }}
-                              aria-hidden="true"
-                            />
-                            <div className="min-w-0 leading-tight">
-                              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                <h3 className="truncate text-sm font-medium text-gray-900">
-                                  {category.name}
-                                </h3>
-                                <span className="text-xs text-gray-500">
-                                  {usage} oppgave{usage !== 1 ? 'r' : ''}
-                                </span>
-                              </div>
-                              {category.description && (
-                                <p className="truncate text-xs text-gray-500">
-                                  {category.description}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex shrink-0 items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => startEdit(category)}
-                              className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              title="Rediger kategori"
-                              aria-label={`Rediger ${category.name}`}
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(category)}
-                              className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
-                              title="Slett kategori"
-                              aria-label={`Slett ${category.name}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })
-                )}
-              </ul>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {isFormOpen && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/30 p-4"
-          onMouseDown={(event) => {
-            event.stopPropagation();
-            cancelEdit();
-          }}
-          role="presentation"
-        >
-          <div
-            className="w-full max-w-xl rounded-lg bg-white shadow-xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="category-form-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-              <h3 id="category-form-title" className="text-lg font-semibold text-gray-900">
-                {editingCategory ? 'Rediger kategori' : 'Ny kategori'}
-              </h3>
-              <button
-                type="button"
-                onClick={cancelEdit}
-                className="rounded-md p-2 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                aria-label="Lukk skjema"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4 p-5" noValidate>
-              {errors.submit && (
-                <div className="rounded-md border border-red-200 bg-red-50 p-3" role="alert">
-                  <p className="text-sm text-red-600">{errors.submit}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="categoryName"
-                    className="mb-1 block text-sm font-medium text-gray-700"
+                return (
+                  <li
+                    key={category.id}
+                    className="flex items-center justify-between gap-3 px-4 py-2"
                   >
-                    Kategorinavn *
-                  </label>
-                  <input
-                    type="text"
-                    id="categoryName"
-                    value={formData.name}
-                    onChange={(e) => handleFormDataChange('name', e.target.value)}
-                    className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.name ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                    placeholder="Strøm"
-                    aria-invalid={!!errors.name}
-                    aria-describedby={errors.name ? 'category-name-error' : undefined}
-                  />
-                  {errors.name && (
-                    <p id="category-name-error" className="mt-1 text-sm text-red-600" role="alert">
-                      {errors.name}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    <Palette className="mr-1 inline h-4 w-4" />
-                    Farge
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={formData.color}
-                      onChange={(e) => handleFormDataChange('color', e.target.value)}
-                      className="h-10 w-12 cursor-pointer rounded border border-gray-300"
-                      aria-label="Velg farge"
-                    />
-                    <div className="flex flex-wrap gap-1">
-                      {predefinedColors.map((color) => (
-                        <button
-                          key={color}
-                          type="button"
-                          onClick={() => handleFormDataChange('color', color)}
-                          className={`h-6 w-6 rounded border-2 ${
-                            formData.color === color ? 'border-gray-800' : 'border-gray-300'
-                          }`}
-                          style={{ backgroundColor: color }}
-                          title={color}
-                          aria-label={`Velg ${color}`}
-                        />
-                      ))}
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span
+                        aria-hidden="true"
+                        className="h-4 w-4 shrink-0 rounded-full ring-1 ring-border-strong"
+                        style={{ backgroundColor: category.color }}
+                      />
+                      <div className="min-w-0 leading-tight">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <h3 className="truncate text-sm font-medium">{category.name}</h3>
+                          <span className="text-xs text-subtle">
+                            {count === undefined
+                              ? 'Ukjent bruk'
+                              : `${count} oppgave${count !== 1 ? 'r' : ''}`}
+                          </span>
+                        </div>
+                        {category.description && (
+                          <p className="truncate text-xs text-subtle">{category.description}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </div>
 
-              <div>
-                <label
-                  htmlFor="categoryDescription"
-                  className="mb-1 block text-sm font-medium text-gray-700"
-                >
-                  Beskrivelse
-                </label>
-                <textarea
-                  id="categoryDescription"
-                  value={formData.description}
-                  onChange={(e) => handleFormDataChange('description', e.target.value)}
-                  rows={3}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Valgfri beskrivelse av kategorien..."
-                />
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={cancelEdit}
-                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Avbryt
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  {editingCategory ? 'Lagre endringer' : 'Legg til'}
-                </button>
-              </div>
-            </form>
-          </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(category)}
+                        className="flex h-10 w-10 items-center justify-center rounded-lg text-subtle hover:bg-surface-muted hover:text-fg"
+                        title="Rediger kategori"
+                        aria-label={`Rediger ${category.name}`}
+                      >
+                        <Edit2 aria-hidden="true" className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => requestDelete(category)}
+                        className="flex h-10 w-10 items-center justify-center rounded-lg text-subtle hover:bg-danger-subtle hover:text-danger"
+                        title="Slett kategori"
+                        aria-label={`Slett ${category.name}`}
+                      >
+                        <Trash2 aria-hidden="true" className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
-      )}
-    </div>,
-    document.body
+      </Modal>
+
+      <Modal
+        open={isFormOpen}
+        onClose={cancelEdit}
+        title={editingCategory ? 'Rediger kategori' : 'Ny kategori'}
+        closeOnBackdrop={!saving}
+        footer={
+          <>
+            <Button variant="secondary" onClick={cancelEdit} disabled={saving}>
+              Avbryt
+            </Button>
+            <Button type="submit" form={formId} loading={saving}>
+              {editingCategory ? 'Lagre endringer' : 'Legg til'}
+            </Button>
+          </>
+        }
+      >
+        <form id={formId} onSubmit={handleSubmit} className="space-y-4" noValidate>
+          {errors.submit && <StatusMessage tone="error">{errors.submit}</StatusMessage>}
+
+          <Field label="Kategorinavn" required error={errors.name}>
+            {(field) => (
+              <Input
+                {...field}
+                type="text"
+                value={formData.name}
+                onChange={(e) => handleFormDataChange('name', e.target.value)}
+                invalid={!!errors.name}
+                placeholder="F.eks. Strøm"
+              />
+            )}
+          </Field>
+
+          <fieldset>
+            <legend className="mb-2 block text-sm font-medium">Farge</legend>
+            <div className="flex flex-wrap items-center gap-2">
+              {PRESET_COLORS.map((color) => {
+                const selected = color.value.toLowerCase() === formData.color.toLowerCase();
+                return (
+                  <button
+                    key={color.value}
+                    type="button"
+                    onClick={() => handleFormDataChange('color', color.value)}
+                    aria-label={color.name}
+                    aria-pressed={selected}
+                    title={color.name}
+                    className={cn(
+                      'flex h-9 w-9 items-center justify-center rounded-full ring-offset-2 ring-offset-surface-raised transition',
+                      selected ? 'ring-2 ring-fg' : 'hover:scale-110'
+                    )}
+                    style={{ backgroundColor: color.value }}
+                  >
+                    {selected && <Check aria-hidden="true" className="h-4 w-4 text-white" />}
+                  </button>
+                );
+              })}
+              <label
+                className={cn(
+                  'relative flex h-9 cursor-pointer items-center gap-2 rounded-full border border-input px-3 text-sm',
+                  !isPresetColor && 'ring-2 ring-fg ring-offset-2 ring-offset-surface-raised'
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 rounded-full ring-1 ring-border-strong"
+                  style={{ backgroundColor: formData.color }}
+                />
+                Egen
+                <input
+                  type="color"
+                  value={formData.color}
+                  onChange={(e) => handleFormDataChange('color', e.target.value)}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  aria-label="Velg egen farge"
+                />
+              </label>
+            </div>
+          </fieldset>
+
+          <Field label="Beskrivelse">
+            {(field) => (
+              <Textarea
+                {...field}
+                value={formData.description}
+                onChange={(e) => handleFormDataChange('description', e.target.value)}
+                rows={3}
+                placeholder="Valgfri beskrivelse av kategorien..."
+              />
+            )}
+          </Field>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Slette kategorien?"
+        confirmLabel="Slett"
+        tone="danger"
+        loading={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void confirmDelete()}
+      >
+        Kategorien «{pendingDelete?.name}» blir fjernet fra listen.
+      </ConfirmDialog>
+    </>
   );
 };
 

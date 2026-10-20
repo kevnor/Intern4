@@ -1,20 +1,217 @@
 @import 'tailwindcss';
 
-body {
-  margin: 0;
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell',
-    'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* `dark:` follows the data-theme attribute set by ThemeProvider (and the inline script in index.html). */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* Static brand scale (Singsaker burgundy) and accent, for decorative use. */
+@theme {
+  --color-brand-50: #fbf3f5;
+  --color-brand-100: #f6e4e9;
+  --color-brand-200: #edc9d3;
+  --color-brand-300: #e0a1b2;
+  --color-brand-400: #cc6d89;
+  --color-brand-500: #b54767;
+  --color-brand-600: #9c2f50;
+  --color-brand-700: #8b1e3f;
+  --color-brand-800: #6f1833;
+  --color-brand-900: #5c162c;
+  --color-brand-950: #350914;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+/* Semantic tokens. Components should use these so they work in both themes. */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input-border);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-subtle: var(--fg-subtle);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-subtle-fg: var(--primary-subtle-fg);
+  --color-ring: var(--ring);
+
+  --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-subtle-fg: var(--accent-subtle-fg);
+
+  --color-success: var(--success);
+  --color-success-fg: var(--success-fg);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-subtle-fg: var(--success-subtle-fg);
+  --color-success-border: var(--success-border);
+
+  --color-warning: var(--warning);
+  --color-warning-fg: var(--warning-fg);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-subtle-fg: var(--warning-subtle-fg);
+  --color-warning-border: var(--warning-border);
+
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-danger-subtle-fg: var(--danger-subtle-fg);
+  --color-danger-border: var(--danger-border);
+
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-subtle-fg: var(--info-subtle-fg);
+  --color-info-border: var(--info-border);
+
+  --color-header: var(--header-bg);
+  --color-header-fg: var(--header-fg);
+  --color-header-hover: var(--header-hover);
 }
 
-input::placeholder,
-textarea::placeholder {
-  color: #9ca3af;
-  opacity: 1;
+:root {
+  color-scheme: light;
+
+  --canvas: #faf8f7;
+  --surface: #ffffff;
+  --surface-muted: #f5f3f2;
+  --surface-raised: #ffffff;
+  --border: #e7e5e4;
+  --border-strong: #d6d3d1;
+  --input-border: #8c857f;
+  --fg: #1c1917;
+  --fg-muted: #57534e;
+  --fg-subtle: #6f6965;
+
+  --primary: #8b1e3f;
+  --primary-hover: #6f1833;
+  --primary-fg: #ffffff;
+  --primary-subtle: #fbf3f5;
+  --primary-subtle-fg: #6f1833;
+  --ring: #b54767;
+
+  --accent: #b45309;
+  --accent-subtle: #fef3c7;
+  --accent-subtle-fg: #854d0e;
+
+  --success: #15803d;
+  --success-fg: #ffffff;
+  --success-subtle: #f0fdf4;
+  --success-subtle-fg: #166534;
+  --success-border: #bbf7d0;
+
+  --warning: #b45309;
+  --warning-fg: #ffffff;
+  --warning-subtle: #fffbeb;
+  --warning-subtle-fg: #92400e;
+  --warning-border: #fde68a;
+
+  --danger: #b91c1c;
+  --danger-hover: #991b1b;
+  --danger-fg: #ffffff;
+  --danger-subtle: #fef2f2;
+  --danger-subtle-fg: #991b1b;
+  --danger-border: #fecaca;
+
+  --info: #1d4ed8;
+  --info-subtle: #eff6ff;
+  --info-subtle-fg: #1e40af;
+  --info-border: #bfdbfe;
+
+  --header-bg: #8b1e3f;
+  --header-fg: #ffffff;
+  --header-hover: rgb(255 255 255 / 0.12);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --canvas: #0f0d0c;
+  --surface: #1c1917;
+  --surface-muted: #262220;
+  --surface-raised: #292524;
+  --border: #3a3431;
+  --border-strong: #57534e;
+  --input-border: #7a736e;
+  --fg: #f5f5f4;
+  --fg-muted: #d6d3d1;
+  --fg-subtle: #a8a29e;
+
+  --primary: #d9849c;
+  --primary-hover: #e0a1b2;
+  --primary-fg: #2a0a14;
+  --primary-subtle: #3a1622;
+  --primary-subtle-fg: #f0bfcc;
+  --ring: #e0a1b2;
+
+  --accent: #fbbf24;
+  --accent-subtle: #3a2a07;
+  --accent-subtle-fg: #fcd34d;
+
+  --success: #4ade80;
+  --success-fg: #052e16;
+  --success-subtle: #0f2e1b;
+  --success-subtle-fg: #86efac;
+  --success-border: #166534;
+
+  --warning: #fbbf24;
+  --warning-fg: #422006;
+  --warning-subtle: #3a2a07;
+  --warning-subtle-fg: #fcd34d;
+  --warning-border: #854d0e;
+
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+  --danger-fg: #450a0a;
+  --danger-subtle: #3b1212;
+  --danger-subtle-fg: #fca5a5;
+  --danger-border: #7f1d1d;
+
+  --info: #60a5fa;
+  --info-subtle: #10233f;
+  --info-subtle-fg: #93c5fd;
+  --info-border: #1e3a8a;
+
+  --header-bg: #2a0e18;
+  --header-fg: #f5e6ea;
+  --header-hover: rgb(255 255 255 / 0.08);
+}
+
+@layer base {
+  /* Tailwind v4 defaults borders to currentColor; use the theme border instead. */
+  *,
+  ::before,
+  ::after,
+  ::backdrop {
+    border-color: var(--border);
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--canvas);
+    color: var(--fg);
+    font-family:
+      -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell',
+      'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  code {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--fg-subtle);
+    opacity: 1;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
 }

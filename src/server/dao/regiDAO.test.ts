@@ -1,16 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ALREADY_PROCESSED_MESSAGE,
   addRegiLog,
   approveRegiLog,
   deletePendingRegiLog,
+  getAllRegiLogs,
   getPendingRegiApprovals,
   getApprovedRegiHoursByUserSince,
   getRegiLogsByUser,
   isCountableRegiAssignment,
+  rejectRegiLog,
 } from './regiDAO';
 import { supabase } from '../supabaseClient';
 import { deleteImages } from '../storage';
-import { getUser } from './userDAO';
+import { getUserLookups } from './userDAO';
 
 vi.mock('../supabaseClient', () => ({
   supabase: {
@@ -19,7 +22,7 @@ vi.mock('../supabaseClient', () => ({
 }));
 
 vi.mock('./userDAO', () => ({
-  getUser: vi.fn(),
+  getUserLookups: vi.fn(),
 }));
 
 vi.mock('../storage', () => ({
@@ -105,13 +108,11 @@ function createSelectEqGteBuilder(data: unknown[]) {
   return asSupabaseBuilder(builder);
 }
 
-function createUpdateBuilder() {
-  const builder: {
-    update: MockFn;
-    eq: MockFn;
-  } = {
+function createDecisionBuilder(rows: unknown[]) {
+  const builder: { update: MockFn; eq: MockFn; select: MockFn } = {
     update: mockFn(() => builder),
-    eq: mockFn(async () => ({ error: null })),
+    eq: mockFn(() => builder),
+    select: mockFn(async () => ({ data: rows, error: null })),
   };
 
   return asSupabaseBuilder(builder);
@@ -275,35 +276,53 @@ describe('regiDAO', () => {
     ];
 
     vi.mocked(supabase.from).mockImplementationOnce(() => createOrderedBuilder(rows));
-    vi.mocked(getUser).mockResolvedValue({
-      id: '11111111-1111-1111-1111-111111111111',
-      name: 'Kari Regi',
-      email: 'kari@example.com',
-      role: 'Full Regi',
-      isActive: true,
+    vi.mocked(getUserLookups).mockResolvedValue({
+      '11111111-1111-1111-1111-111111111111': { name: 'Kari Regi', email: 'kari@example.com' },
     });
 
     const result = await getPendingRegiApprovals();
 
-    expect(getUser).toHaveBeenCalledTimes(1);
-    expect(getUser).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111');
+    expect(getUserLookups).toHaveBeenCalledTimes(1);
+    expect(getUserLookups).toHaveBeenCalledWith(['11111111-1111-1111-1111-111111111111']);
     expect(result).toHaveLength(2);
     expect(result[0].userName).toBe('Kari Regi');
     expect(result[1].userEmail).toBe('kari@example.com');
   });
 
   it('stores approver metadata when approving regi work', async () => {
-    const updateBuilder = createUpdateBuilder();
-    vi.mocked(supabase.from).mockImplementationOnce(() => updateBuilder);
+    const builder = createDecisionBuilder([{ id: 12 }]);
+    vi.mocked(supabase.from).mockImplementationOnce(() => builder);
 
-    await approveRegiLog('12', '22222222-2222-2222-2222-222222222222', 'Ser bra ut');
+    await approveRegiLog('12', '22222222-2222-2222-2222-222222222222', ' Ser bra ut ');
 
-    expect(updateBuilder.update).toHaveBeenCalledWith({
+    expect(builder.update).toHaveBeenCalledWith({
       approved_state: 1,
       approved_by_uuid: '22222222-2222-2222-2222-222222222222',
       approval_comment: 'Ser bra ut',
     });
-    expect(updateBuilder.eq).toHaveBeenCalledWith('id', '12');
+    expect(builder.eq).toHaveBeenCalledWith('id', 12);
+    expect(builder.eq).toHaveBeenCalledWith('approved_state', 0);
+  });
+
+  it('records who rejected regi work and why', async () => {
+    const builder = createDecisionBuilder([{ id: 13 }]);
+    vi.mocked(supabase.from).mockImplementationOnce(() => builder);
+
+    await rejectRegiLog('13', '22222222-2222-2222-2222-222222222222', 'Mangler bilde');
+
+    expect(builder.update).toHaveBeenCalledWith({
+      approved_state: 2,
+      approved_by_uuid: '22222222-2222-2222-2222-222222222222',
+      approval_comment: 'Mangler bilde',
+    });
+  });
+
+  it('refuses to overwrite a decision another manager already made', async () => {
+    vi.mocked(supabase.from).mockImplementationOnce(() => createDecisionBuilder([]));
+
+    await expect(approveRegiLog('14', '22222222-2222-2222-2222-222222222222')).rejects.toThrow(
+      ALREADY_PROCESSED_MESSAGE
+    );
   });
 
   it('creates granted regi logs as pending by default', async () => {
@@ -538,5 +557,25 @@ describe('regiDAO', () => {
       'user_uuid, hours_used, performed_at, approved_state'
     );
     expect(hoursBuilder.gte).toHaveBeenCalledWith('performed_at', '2026-08-01');
+  });
+
+  it('limits the regi log to one semester when given a range', async () => {
+    vi.mocked(getUserLookups).mockResolvedValue({});
+    let orderCalls = 0;
+    const builder: { select: MockFn; gte: MockFn; lt: MockFn; order: MockFn } = {
+      select: mockFn(() => builder),
+      gte: mockFn(() => builder),
+      lt: mockFn(() => builder),
+      order: mockFn(() => {
+        orderCalls += 1;
+        return orderCalls > 1 ? Promise.resolve({ data: [], error: null }) : builder;
+      }),
+    };
+    vi.mocked(supabase.from).mockReturnValue(asSupabaseBuilder(builder));
+
+    await getAllRegiLogs({ start: new Date(2026, 7, 1), end: new Date(2027, 0, 1) });
+
+    expect(builder.gte).toHaveBeenCalledWith('performed_at', '2026-08-01');
+    expect(builder.lt).toHaveBeenCalledWith('performed_at', '2027-01-01');
   });
 });

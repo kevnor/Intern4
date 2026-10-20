@@ -1,5 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, Clock, Search, User, Users, X } from 'lucide-react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
+import { Search } from 'lucide-react';
+import {
+  Button,
+  Field,
+  Input,
+  Modal,
+  Select,
+  StatusMessage,
+  Textarea,
+  controlClasses,
+} from '../../../shared/components';
+import { cn } from '../../../shared/utils/cn';
+import { formatDateColumnValue } from '../../../shared/utils/date';
 import {
   safeParseTaskFormData,
   TaskCreationData,
@@ -31,15 +43,15 @@ const TaskCreationModal: React.FC<TaskCreationModalProps> = ({
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [contactPersonQuery, setContactPersonQuery] = useState('');
+  const formId = useId();
 
-  const toDateTimeLocalValue = (value?: string | null): string => {
+  // Deadlines are calendar dates; show the stored date (or a timestamp's Oslo date).
+  const toDateInputValue = (value?: string | null): string => {
     if (!value) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
 
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-
-    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-    return localDate.toISOString().slice(0, 16);
+    return Number.isNaN(date.getTime()) ? '' : formatDateColumnValue(date);
   };
 
   useEffect(() => {
@@ -49,7 +61,7 @@ const TaskCreationModal: React.FC<TaskCreationModalProps> = ({
         category: editingTask?.category ?? (categories.length > 0 ? categories[0].name : ''),
         description: editingTask?.description ?? '',
         contactPersonId: editingTask?.contactPersonId ?? currentUser?.id ?? '',
-        deadline: toDateTimeLocalValue(editingTask?.deadline),
+        deadline: toDateInputValue(editingTask?.deadline),
         hourEstimate: editingTask?.hourEstimate != null ? String(editingTask.hourEstimate) : '',
         maxParticipants: String(editingTask?.maxParticipants ?? 1),
       });
@@ -89,6 +101,9 @@ const TaskCreationModal: React.FC<TaskCreationModalProps> = ({
       const hours = Number(formData.hourEstimate);
       if (isNaN(hours) || hours <= 0) {
         newErrors.hourEstimate = 'Timeestimat må være et positivt tall';
+      } else if (!Number.isInteger(hours)) {
+        // work_tasks.time_estimate is a smallint column.
+        newErrors.hourEstimate = 'Timeestimat må være et helt antall timer';
       }
     }
 
@@ -96,8 +111,11 @@ const TaskCreationModal: React.FC<TaskCreationModalProps> = ({
       newErrors.maxParticipants = 'Maksimalt antall deltakere er påkrevd';
     } else {
       const maxParticipants = Number(formData.maxParticipants);
+      const joinedCount = editingTask?.participants.length ?? 0;
       if (isNaN(maxParticipants) || maxParticipants < 1) {
         newErrors.maxParticipants = 'Maksimalt antall deltakere må være minst 1';
+      } else if (maxParticipants < joinedCount) {
+        newErrors.maxParticipants = `Kan ikke være lavere enn antall påmeldte (${joinedCount})`;
       }
     }
 
@@ -111,7 +129,8 @@ const TaskCreationModal: React.FC<TaskCreationModalProps> = ({
       category: formData.category,
       description: formData.description.trim() || undefined,
       contactPersonId: formData.contactPersonId || undefined,
-      deadline: formData.deadline ? new Date(formData.deadline) : undefined,
+      // Noon keeps the same calendar day in any nearby time zone.
+      deadline: formData.deadline ? new Date(`${formData.deadline}T12:00:00`) : undefined,
       hourEstimate: Number(formData.hourEstimate),
       maxParticipants: Number(formData.maxParticipants),
     };
@@ -183,79 +202,47 @@ const TaskCreationModal: React.FC<TaskCreationModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
-      onMouseDown={onClose}
-      role="presentation"
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      fullScreenOnMobile
+      closeOnBackdrop={!isSubmitting}
+      title={isEditing ? 'Rediger oppgave' : 'Opprett ny oppgave'}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
+            Avbryt
+          </Button>
+          <Button type="submit" form={formId} loading={isSubmitting}>
+            {isEditing ? 'Lagre endringer' : 'Opprett oppgave'}
+          </Button>
+        </>
+      }
     >
-      <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">
-            {isEditing ? 'Rediger oppgave' : 'Opprett ny oppgave'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Lukk modal"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+      <form id={formId} onSubmit={handleSubmit} className="space-y-5" noValidate>
+        {errors.submit && <StatusMessage tone="error">{errors.submit}</StatusMessage>}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6" noValidate>
-          {errors.submit && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-md" role="alert">
-              <p className="text-sm text-red-600">{errors.submit}</p>
-            </div>
-          )}
-
-          {/* Task Name */}
-          <div>
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
-              Oppgavenavn *
-            </label>
-            <input
+        <Field label="Oppgavenavn" required error={errors.title}>
+          {(field) => (
+            <Input
+              {...field}
               type="text"
-              id="title"
               value={formData.title}
               onChange={(e) => handleInputChange('title', e.target.value)}
-              className={`w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.title
-                  ? 'border-red-300 focus:border-red-500'
-                  : 'border-gray-300 focus:border-blue-500'
-              }`}
-              placeholder="Begå lovbrudd"
-              aria-invalid={!!errors.title}
-              aria-describedby={errors.title ? 'title-error' : undefined}
+              invalid={!!errors.title}
+              placeholder="F.eks. Vaske storkjøkkenet"
             />
-            {errors.title && (
-              <p id="title-error" className="mt-1 text-sm text-red-600" role="alert">
-                {errors.title}
-              </p>
-            )}
-          </div>
+          )}
+        </Field>
 
-          {/* Category */}
-          <div>
-            <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
-              Kategori *
-            </label>
-            <select
-              id="category"
+        <Field label="Kategori" required error={errors.category}>
+          {(field) => (
+            <Select
+              {...field}
               value={formData.category}
               onChange={(e) => handleInputChange('category', e.target.value)}
-              className={`w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.category
-                  ? 'border-red-300 focus:border-red-500'
-                  : 'border-gray-300 focus:border-blue-500'
-              }`}
-              aria-invalid={!!errors.category}
-              aria-describedby={errors.category ? 'category-error' : undefined}
+              invalid={!!errors.category}
             >
               <option value="">Velg kategori</option>
               {categories.map((category) => (
@@ -263,217 +250,144 @@ const TaskCreationModal: React.FC<TaskCreationModalProps> = ({
                   {category.name}
                 </option>
               ))}
-            </select>
-            {errors.category && (
-              <p id="category-error" className="mt-1 text-sm text-red-600" role="alert">
-                {errors.category}
-              </p>
-            )}
-          </div>
+            </Select>
+          )}
+        </Field>
 
-          {/* Description */}
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-              Beskrivelse
-            </label>
-            <textarea
-              id="description"
+        <Field label="Beskrivelse">
+          {(field) => (
+            <Textarea
+              {...field}
               value={formData.description}
               onChange={(e) => handleInputChange('description', e.target.value)}
               rows={4}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Beskriv oppgaven i detalj..."
+              placeholder="Hva skal gjøres, og hvor?"
             />
-          </div>
+          )}
+        </Field>
 
-          <div>
-            <label
-              htmlFor="contactPersonSearch"
-              className="block text-sm font-medium text-gray-700 mb-2"
-            >
-              <User className="w-4 h-4 inline mr-1" />
-              Kontaktperson
-            </label>
-            <div className="space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
-                  id="contactPersonSearch"
-                  type="text"
-                  value={contactPersonQuery}
-                  onChange={(e) => setContactPersonQuery(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Søk etter navn eller e-post"
-                />
-              </div>
-
-              {selectedContactPerson && (
-                <div className="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-blue-900">
-                      {selectedContactPerson.name}
-                    </p>
-                    {selectedContactPerson.email && (
-                      <p className="truncate text-xs text-blue-700">
-                        {selectedContactPerson.email}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleInputChange('contactPersonId', '')}
-                    className="ml-3 text-sm font-medium text-blue-700 hover:text-blue-900"
-                  >
-                    Fjern
-                  </button>
-                </div>
-              )}
-
-              <div className="max-h-48 overflow-y-auto rounded-md border border-gray-200">
-                {filteredContactPeople.length > 0 ? (
-                  filteredContactPeople.map((person) => {
-                    const isSelected = person.id === formData.contactPersonId;
-
-                    return (
-                      <button
-                        key={person.id}
-                        type="button"
-                        onClick={() => handleInputChange('contactPersonId', person.id)}
-                        className={`flex w-full items-start justify-between px-3 py-2 text-left transition-colors ${
-                          isSelected ? 'bg-blue-50 text-blue-900' : 'hover:bg-gray-50'
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{person.name}</p>
-                          {person.email && (
-                            <p className="truncate text-xs text-gray-500">{person.email}</p>
-                          )}
-                        </div>
-                        {isSelected && <span className="ml-3 text-xs font-semibold">Valgt</span>}
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div className="px-3 py-4 text-sm text-gray-500">
-                    Ingen aktive brukere matcher søket.
-                  </div>
-                )}
-              </div>
-
-              <p className="text-xs text-gray-500">Velg én aktiv bruker som kontaktperson.</p>
-            </div>
-          </div>
-
-          {/* Two column layout for smaller fields */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Deadline */}
-            <div>
-              <label htmlFor="deadline" className="block text-sm font-medium text-gray-700 mb-2">
-                <Calendar className="w-4 h-4 inline mr-1" />
-                Frist
-              </label>
-              <input
-                type="datetime-local"
-                id="deadline"
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <Field label="Frist" className="sm:col-span-1">
+            {(field) => (
+              <Input
+                {...field}
+                type="date"
                 value={formData.deadline}
                 onChange={(e) => handleInputChange('deadline', e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
-            </div>
-
-            {/* Hour Estimate */}
-            <div>
-              <label
-                htmlFor="hourEstimate"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                <Clock className="w-4 h-4 inline mr-1" />
-                Timeestimat
-              </label>
-              <input
+            )}
+          </Field>
+          <Field label="Timeestimat" required error={errors.hourEstimate}>
+            {(field) => (
+              <Input
+                {...field}
                 type="number"
-                id="hourEstimate"
+                inputMode="numeric"
+                min="0"
+                step="1"
                 value={formData.hourEstimate}
                 onChange={(e) => handleInputChange('hourEstimate', e.target.value)}
-                min="0"
-                step="0.5"
-                className={`w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors.hourEstimate
-                    ? 'border-red-300 focus:border-red-500'
-                    : 'border-gray-300 focus:border-blue-500'
-                }`}
-                placeholder="F.eks. 2.5"
-                aria-invalid={!!errors.hourEstimate}
-                aria-describedby={errors.hourEstimate ? 'hourEstimate-error' : undefined}
+                invalid={!!errors.hourEstimate}
+                placeholder="F.eks. 2"
               />
-              {errors.hourEstimate && (
-                <p id="hourEstimate-error" className="mt-1 text-sm text-red-600" role="alert">
-                  {errors.hourEstimate}
-                </p>
-              )}
-            </div>
-          </div>
+            )}
+          </Field>
+          <Field
+            label="Maksimalt antall deltakere"
+            required
+            error={errors.maxParticipants}
+            hint={
+              editingTask?.participants.length
+                ? `${editingTask.participants.length} er påmeldt nå`
+                : 'Minst 1'
+            }
+          >
+            {(field) => (
+              <Input
+                {...field}
+                type="number"
+                inputMode="numeric"
+                min={Math.max(editingTask?.participants.length ?? 0, 1)}
+                value={formData.maxParticipants}
+                onChange={(e) => handleInputChange('maxParticipants', e.target.value)}
+                invalid={!!errors.maxParticipants}
+              />
+            )}
+          </Field>
+        </div>
 
-          {/* Max Participants - Now Required */}
-          <div>
-            <label
-              htmlFor="maxParticipants"
-              className="block text-sm font-medium text-gray-700 mb-2"
-            >
-              <Users className="w-4 h-4 inline mr-1" />
-              Maksimalt antall deltakere *
-            </label>
-            <input
-              type="number"
-              id="maxParticipants"
-              value={formData.maxParticipants}
-              onChange={(e) => handleInputChange('maxParticipants', e.target.value)}
-              min="1"
-              className={`w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.maxParticipants
-                  ? 'border-red-300 focus:border-red-500'
-                  : 'border-gray-300 focus:border-blue-500'
-              }`}
-              placeholder="F.eks. 3"
-              aria-invalid={!!errors.maxParticipants}
-              aria-describedby="maxParticipants-help"
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium text-fg">Kontaktperson</legend>
+          {selectedContactPerson && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary-subtle px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-primary-subtle-fg">
+                  {selectedContactPerson.name}
+                </p>
+                {selectedContactPerson.email && (
+                  <p className="truncate text-xs text-primary-subtle-fg/80">
+                    {selectedContactPerson.email}
+                  </p>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleInputChange('contactPersonId', '')}
+              >
+                Fjern
+              </Button>
+            </div>
+          )}
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle"
             />
-            <p id="maxParticipants-help" className="mt-1 text-sm text-gray-500">
-              Angi hvor mange personer som kan melde seg på denne oppgaven (minst 1)
-            </p>
-            {errors.maxParticipants && (
-              <p className="mt-1 text-sm text-red-600" role="alert">
-                {errors.maxParticipants}
-              </p>
+            <input
+              type="search"
+              aria-label="Søk etter kontaktperson"
+              value={contactPersonQuery}
+              onChange={(e) => setContactPersonQuery(e.target.value)}
+              className={controlClasses(false, 'min-h-10 py-2 pl-9')}
+              placeholder="Søk etter navn eller e-post"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto rounded-xl border border-border">
+            {filteredContactPeople.length > 0 ? (
+              filteredContactPeople.map((person) => {
+                const isSelected = person.id === formData.contactPersonId;
+
+                return (
+                  <button
+                    key={person.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => handleInputChange('contactPersonId', person.id)}
+                    className={cn(
+                      'flex min-h-11 w-full items-center justify-between px-3 py-2 text-left transition-colors',
+                      isSelected
+                        ? 'bg-primary-subtle text-primary-subtle-fg'
+                        : 'hover:bg-surface-muted'
+                    )}
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">{person.name}</span>
+                      {person.email && (
+                        <span className="block truncate text-xs text-subtle">{person.email}</span>
+                      )}
+                    </span>
+                    {isSelected && <span className="ml-3 text-xs font-semibold">Valgt</span>}
+                  </button>
+                );
+              })
+            ) : (
+              <p className="px-3 py-4 text-sm text-subtle">Ingen aktive brukere matcher søket.</p>
             )}
           </div>
-
-          {/* Form Actions */}
-          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-            >
-              Avbryt
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isSubmitting
-                ? isEditing
-                  ? 'Lagrer...'
-                  : 'Oppretter...'
-                : isEditing
-                  ? 'Lagre endringer'
-                  : 'Opprett oppgave'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </fieldset>
+      </form>
+    </Modal>
   );
 };
 

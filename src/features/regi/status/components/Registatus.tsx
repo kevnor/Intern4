@@ -1,128 +1,216 @@
-import React from 'react';
-import { RefreshCw, Search } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { useAuth } from '../../../../app/providers/AuthContext';
 import { canApproveWork } from '../../permissions';
-import { semesterLabel, useRegistatus } from '../hooks/useRegistatus';
+import { USER_ROLES } from '../../../../shared/types/roles';
+import SemesterHoursCard from './SemesterHoursCard';
+import { RegistatusRow, useRegistatus } from '../hooks/useRegistatus';
+import {
+  Badge,
+  Button,
+  DataTable,
+  EmptyState,
+  SearchInput,
+  SegmentedControl,
+  Skeleton,
+  StatusMessage,
+} from '../../../../shared/components';
+import { formatHours } from '../../../../shared/utils/date';
+import { cn } from '../../../../shared/utils/cn';
 
-const Registatus: React.FC = () => {
+type RowStatus = 'missing' | 'done' | 'leave' | 'exempt';
+type StatusFilter = 'all' | RowStatus;
+
+export const getRowStatus = (row: RegistatusRow): RowStatus =>
+  row.onLeave
+    ? 'leave'
+    : row.requiredHours === 0
+      ? 'exempt'
+      : row.remainingHours > 0
+        ? 'missing'
+        : 'done';
+
+const StatusBadge = ({ row }: { row: RegistatusRow }) => {
+  const status = getRowStatus(row);
+  if (status === 'leave') return <Badge tone="warning">Permisjon</Badge>;
+  if (status === 'missing') return <Badge tone="danger">Mangler timer</Badge>;
+  if (status === 'exempt') return <Badge>Ingen krav</Badge>;
+  return <Badge tone="success">Oppfylt</Badge>;
+};
+
+const ProgressMeter = ({ row }: { row: RegistatusRow }) => {
+  if (row.requiredHours === 0) {
+    return <span className="text-sm text-subtle">{formatHours(row.approvedHours)} godkjent</span>;
+  }
+  // Based on what is still missing, so extra regi doesn't hide missing vakt.
+  const ratio = (row.requiredHours - row.remainingHours) / row.requiredHours;
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        role="meter"
+        aria-label={`${row.name}: ${formatHours(row.approvedHours)} av ${formatHours(row.requiredHours)}`}
+        aria-valuemin={0}
+        aria-valuemax={row.requiredHours}
+        aria-valuenow={row.requiredHours - row.remainingHours}
+        className="h-2 w-24 overflow-hidden rounded-full bg-surface-muted"
+      >
+        <div
+          className={cn('h-full rounded-full', ratio >= 1 ? 'bg-success' : 'bg-primary')}
+          style={{ width: `${Math.round(ratio * 100)}%` }}
+        />
+      </div>
+      <span className="whitespace-nowrap text-sm tabular-nums">
+        {formatHours(row.approvedHours)}
+        <span className="text-subtle"> / {formatHours(row.requiredHours)}</span>
+      </span>
+      {row.requiresVakt && (
+        <span className="whitespace-nowrap text-xs text-subtle">
+          Regi {formatHours(row.regiHours)} · Vakt {formatHours(row.vaktHours)}
+        </span>
+      )}
+    </div>
+  );
+};
+
+type RegistatusProps = {
+  // Opens "Gi regi" prefilled with this resident.
+  onGrant?: (row: RegistatusRow) => void;
+};
+
+const Registatus: React.FC<RegistatusProps> = ({ onGrant }) => {
   const { user, loading: authLoading } = useAuth();
-  const { filtered, loading, error, query, setQuery, load } = useRegistatus(user, authLoading);
+  const { semesterLabel, filtered, loading, error, query, setQuery, load } = useRegistatus(
+    user,
+    authLoading
+  );
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+
+  const counts = useMemo(() => {
+    const result = { all: filtered.length, missing: 0, done: 0, leave: 0, exempt: 0 };
+    filtered.forEach((row) => (result[getRowStatus(row)] += 1));
+    return result;
+  }, [filtered]);
+
+  const rows =
+    statusFilter === 'all'
+      ? filtered
+      : filtered.filter((row) => getRowStatus(row) === statusFilter);
+
+  const grantButton = (row: RegistatusRow) =>
+    onGrant ? (
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => onGrant(row)}
+        aria-label={`Gi timer til ${row.name}`}
+        icon={<Plus aria-hidden="true" className="h-4 w-4" />}
+      >
+        Gi timer
+      </Button>
+    ) : null;
 
   if (authLoading) return null;
   if (!user || !canApproveWork(user.role)) {
-    return (
-      <div className="p-4 shadow-sm rounded-md bg-gray-50 text-sm text-gray-700">
-        Du har ikke tilgang til registatus.
-      </div>
-    );
+    return <StatusMessage tone="info">Du har ikke tilgang til registatus.</StatusMessage>;
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Søk (navn, e-post, rolle)..."
-            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <button
-          onClick={load}
-          disabled={loading}
-          className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Oppdater
-        </button>
+    <div className="space-y-4">
+      {user.role === USER_ROLES.ADMIN && <SemesterHoursCard onSaved={() => void load()} />}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Søk på navn, e-post eller rolle..."
+          label="Søk i registatus"
+          onRefresh={() => void load()}
+          refreshing={loading}
+          className="flex-1"
+        />
+        <SegmentedControl<StatusFilter>
+          label="Filtrer på status"
+          value={statusFilter}
+          onChange={setStatusFilter}
+          className="w-full overflow-x-auto lg:w-auto"
+          options={[
+            { value: 'all', label: `Alle (${counts.all})` },
+            { value: 'missing', label: `Mangler (${counts.missing})` },
+            { value: 'done', label: `Oppfylt (${counts.done})` },
+            { value: 'leave', label: `Permisjon (${counts.leave})` },
+          ]}
+        />
       </div>
 
-      {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-sm text-red-700">{error}</p>
+      {error && <StatusMessage tone="error">{error}</StatusMessage>}
+
+      <p className="text-sm text-muted">
+        Godkjente timer siden semesterstart <span className="font-medium">{semesterLabel}</span>.
+      </p>
+
+      {loading ? (
+        <div aria-busy="true" className="space-y-3">
+          <span className="sr-only">Laster...</span>
+          {[0, 1, 2, 3].map((index) => (
+            <Skeleton key={index} className="h-20 rounded-2xl md:h-12" />
+          ))}
         </div>
+      ) : (
+        <DataTable
+          rows={rows}
+          getRowKey={(row) => row.id}
+          emptyMessage={
+            <EmptyState title="Ingen nåværende beboere funnet.">
+              Prøv et annet søk eller filter.
+            </EmptyState>
+          }
+          renderCard={(row) => (
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">{row.name}</p>
+                  <p className="text-xs text-subtle">{row.role ?? 'Uten rolle'}</p>
+                </div>
+                <StatusBadge row={row} />
+              </div>
+              <ProgressMeter row={row} />
+              {getRowStatus(row) === 'missing' && (
+                <p className="text-xs text-muted">Gjenstår {formatHours(row.remainingHours)}</p>
+              )}
+              {onGrant && <div className="pt-1">{grantButton(row)}</div>}
+            </div>
+          )}
+          columns={[
+            {
+              key: 'name',
+              header: 'Navn',
+              render: (row) => (
+                <>
+                  <div className="font-medium">{row.name}</div>
+                  <div className="text-xs text-subtle">{row.email}</div>
+                </>
+              ),
+            },
+            { key: 'role', header: 'Rolle', render: (row) => row.role ?? 'Uten rolle' },
+            { key: 'progress', header: 'Godkjent', render: (row) => <ProgressMeter row={row} /> },
+            {
+              key: 'remaining',
+              header: 'Gjenstår',
+              className: 'whitespace-nowrap tabular-nums',
+              render: (row) => formatHours(row.remainingHours),
+            },
+            { key: 'status', header: 'Status', render: (row) => <StatusBadge row={row} /> },
+            ...(onGrant
+              ? [
+                  {
+                    key: 'grant',
+                    header: <span className="sr-only">Handlinger</span>,
+                    render: grantButton,
+                  },
+                ]
+              : []),
+          ]}
+        />
       )}
-
-      <div className="p-3 shadow-sm rounded-md bg-gray-50 text-sm text-gray-700">
-        Nåværende beboere: <span className="font-semibold">{filtered.length}</span> • Semesterstart:{' '}
-        <span className="font-semibold">{semesterLabel}</span>
-      </div>
-
-      <div className="max-h-[60vh] md:max-h-[65vh] overflow-auto border border-gray-200 rounded-xl bg-white shadow-sm">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 sticky top-0">
-            <tr>
-              <th className="text-left px-4 py-2 text-xs font-medium text-gray-600 uppercase tracking-wide">
-                Navn
-              </th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-gray-600 uppercase tracking-wide">
-                Rolle
-              </th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-gray-600 uppercase tracking-wide">
-                Godkjent
-              </th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-gray-600 uppercase tracking-wide">
-                Krav
-              </th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-gray-600 uppercase tracking-wide">
-                Gjenstår
-              </th>
-              <th className="text-left px-4 py-2 text-xs font-medium text-gray-600 uppercase tracking-wide">
-                Status
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {loading && (
-              <tr>
-                <td className="p-3 text-gray-600" colSpan={6}>
-                  Laster...
-                </td>
-              </tr>
-            )}
-
-            {!loading &&
-              filtered.map((row) => (
-                <tr key={row.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{row.name}</div>
-                    <div className="text-xs text-gray-500">{row.email}</div>
-                  </td>
-                  <td className="px-4 py-3">{row.role ?? 'Uten rolle'}</td>
-                  <td className="px-4 py-3">{row.approvedHours.toFixed(2)} t</td>
-                  <td className="px-4 py-3">{row.requiredHours.toFixed(0)} t</td>
-                  <td className="px-4 py-3">{row.remainingHours.toFixed(2)} t</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {row.onLeave ? (
-                      <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                        Permisjon
-                      </span>
-                    ) : row.remainingHours > 0 ? (
-                      <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                        Mangler timer
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                        Oppfylt
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-
-            {!loading && filtered.length === 0 && (
-              <tr>
-                <td className="p-3 text-gray-600" colSpan={6}>
-                  Ingen nåværende beboere funnet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 };

@@ -1,18 +1,32 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { z } from 'zod';
 import { useAuth } from '../../../../app/providers/AuthContext';
 import { WorkTypeSchema } from '../../../../shared/types/regi';
 import { useGrantRegiWorkflow } from '../hooks/useGrantRegiWorkflow';
+import {
+  Button,
+  Field,
+  Input,
+  Select,
+  StatusMessage,
+  Textarea,
+} from '../../../../shared/components';
+import { formatDateColumnValue } from '../../../../shared/utils/date';
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
 
+const today = () => formatDateColumnValue(new Date());
+
 const FormSchema = z.object({
-  userId: z.string().uuid({ message: 'Velg en bruker' }),
-  title: z.string().min(1, 'Påkrevd'),
-  description: z.string().min(1, 'Påkrevd'),
-  date: z.string().min(1, 'Påkrevd'),
-  hours: z.coerce.number().positive('Må være > 0'),
+  userId: z.string().uuid({ message: 'Velg en beboer' }),
+  title: z.string().trim().min(1, 'Skriv en kort tittel'),
+  description: z.string().trim().min(1, 'Beskriv arbeidet'),
+  date: z
+    .string()
+    .min(1, 'Velg dato')
+    .refine((value) => value <= today(), 'Datoen kan ikke være i fremtiden'),
+  hours: z.coerce.number().positive('Må være mer enn 0'),
   type: WorkTypeSchema,
 });
 
@@ -25,51 +39,65 @@ type FormState = {
   type: string;
 };
 
-const GrantRegiForm: React.FC<{ onCreated?: () => void }> = ({ onCreated }) => {
+const emptyForm = (type = '', userId = ''): FormState => ({
+  userId,
+  title: '',
+  description: '',
+  date: today(),
+  hours: '',
+  type,
+});
+
+type GrantRegiFormProps = {
+  onCreated?: () => void;
+  // Preselects a resident, e.g. when opened from their row in Registatus.
+  initialUserId?: string;
+  hideHeading?: boolean;
+};
+
+const GrantRegiForm: React.FC<GrantRegiFormProps> = ({
+  onCreated,
+  initialUserId = '',
+  hideHeading = false,
+}) => {
   const { user } = useAuth();
   const { categories, users, loading, message, setMessage, createGrantedLog } =
     useGrantRegiWorkflow();
-  const [form, setForm] = useState<FormState>({
-    userId: '',
-    title: '',
-    description: '',
-    date: new Date().toISOString().split('T')[0],
-    hours: '',
-    type: '',
-  });
+  const [form, setForm] = useState<FormState>(() => emptyForm('', initialUserId));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [succeeded, setSucceeded] = useState(false);
 
-  useEffect(() => {
-    if (categories.length === 0) return;
-    setForm((prev) => ({ ...prev, type: prev.type || categories[0].name }));
-  }, [categories]);
+  const selectedType =
+    form.type ||
+    categories.find((category) => category.name === 'Regi')?.name ||
+    categories[0]?.name ||
+    '';
 
   const setField = (k: keyof FormState, v: string) => {
     setForm((s) => ({ ...s, [k]: v }));
     setErrors((e) => ({ ...e, [k]: '' }));
     setMessage(null);
+    setSucceeded(false);
   };
 
-  const sortedUsers = useMemo(() => {
-    return [...users].sort((a, b) => a.name.localeCompare(b.name));
-  }, [users]);
+  const sortedUsers = useMemo(
+    () => [...users].sort((a, b) => a.name.localeCompare(b.name, 'no')),
+    [users]
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
     setMessage(null);
+    setSucceeded(false);
 
-    const parsed = FormSchema.safeParse({
-      ...form,
-      hours: form.hours,
-    });
+    const parsed = FormSchema.safeParse({ ...form, type: selectedType });
 
     if (!parsed.success) {
       const map: Record<string, string> = {};
       parsed.error.issues.forEach((issue) => {
-        const key = issue.path[0] as string;
-        map[key] = issue.message;
+        map[issue.path[0] as string] = issue.message;
       });
       setErrors(map);
       return;
@@ -84,22 +112,18 @@ const GrantRegiForm: React.FC<{ onCreated?: () => void }> = ({ onCreated }) => {
           userId: parsed.data.userId,
           title: parsed.data.title,
           description: parsed.data.description,
-          date: new Date(parsed.data.date),
+          // Noon keeps the chosen calendar day regardless of time zone.
+          date: new Date(`${parsed.data.date}T12:00:00`),
           hours: parsed.data.hours,
           type: parsed.data.type,
         },
         user.id
       );
 
-      setMessage('Regitimer registrert og godkjent.');
-      setForm({
-        userId: '',
-        title: '',
-        description: '',
-        date: new Date().toISOString().split('T')[0],
-        hours: '',
-        type: categories[0]?.name ?? '',
-      });
+      const recipient = users.find((candidate) => candidate.id === parsed.data.userId);
+      setMessage(`Registrert og godkjent for ${recipient?.name ?? 'beboeren'}.`);
+      setSucceeded(true);
+      setForm(emptyForm(selectedType));
       onCreated?.();
     } catch (err) {
       console.error(err);
@@ -110,106 +134,122 @@ const GrantRegiForm: React.FC<{ onCreated?: () => void }> = ({ onCreated }) => {
   };
 
   return (
-    <div className="space-y-1">
-      <h2 className="font-medium text-xl mb-2">Gi regitimer</h2>
-      <p className="text-sm text-gray-600 mb-4">
-        Registrer og godkjenn regi på vegne av aktive brukere.
-      </p>
-      <form onSubmit={handleSubmit} className="space-y-3">
+    <form onSubmit={handleSubmit} className="max-w-2xl space-y-4" noValidate>
+      {!hideHeading && (
         <div>
-          <label className="block mb-1 text-sm font-medium text-gray-700">Bruker</label>
-          <select
+          <h2 className="text-lg font-semibold">Gi regitimer</h2>
+          <p className="text-sm text-muted">
+            Timene registreres og godkjennes med en gang, med deg som godkjenner.
+          </p>
+        </div>
+      )}
+
+      {message && (
+        <StatusMessage
+          tone={succeeded ? 'success' : 'error'}
+          onDismiss={() => {
+            setMessage(null);
+            setSucceeded(false);
+          }}
+        >
+          {message}
+        </StatusMessage>
+      )}
+
+      <Field label="Beboer" required error={errors.userId}>
+        {(field) => (
+          <Select
+            {...field}
             value={form.userId}
             onChange={(e) => setField('userId', e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            invalid={!!errors.userId}
             disabled={loading}
           >
-            <option value="">Velg bruker</option>
+            <option value="">{loading ? 'Laster beboere...' : 'Velg beboer'}</option>
             {sortedUsers.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name} ({u.email})
               </option>
             ))}
-          </select>
-          {errors.userId && <p className="text-red-600 text-sm mt-1">{errors.userId}</p>}
-        </div>
+          </Select>
+        )}
+      </Field>
 
-        <div>
-          <label className="block mb-1 text-sm font-medium text-gray-700">Tittel</label>
-          <input
+      <Field label="Tittel" required error={errors.title}>
+        {(field) => (
+          <Input
+            {...field}
             value={form.title}
             onChange={(e) => setField('title', e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Arbeidet oppsummert"
+            invalid={!!errors.title}
+            placeholder="F.eks. Hjalp til på dugnad"
           />
-          {errors.title && <p className="text-red-600 text-sm mt-1">{errors.title}</p>}
-        </div>
+        )}
+      </Field>
 
-        <div>
-          <label className="block mb-1 text-sm font-medium text-gray-700">Arbeidets art</label>
-          <select
-            value={form.type}
-            onChange={(e) => setField('type', e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">Velg type</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.name}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-          {errors.type && <p className="text-red-600 text-sm mt-1">{errors.type}</p>}
-        </div>
-
-        <div>
-          <label className="block mb-1 text-sm font-medium text-gray-700">Beskrivelse</label>
-          <textarea
-            value={form.description}
-            onChange={(e) => setField('description', e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            rows={3}
-            placeholder="Forklaring av arbeidet"
-          />
-          {errors.description && <p className="text-red-600 text-sm mt-1">{errors.description}</p>}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block mb-1 text-sm font-medium text-gray-700">Dato</label>
-            <input
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Field label="Dato" required error={errors.date}>
+          {(field) => (
+            <Input
+              {...field}
               type="date"
+              max={today()}
               value={form.date}
               onChange={(e) => setField('date', e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              invalid={!!errors.date}
             />
-            {errors.date && <p className="text-red-600 text-sm mt-1">{errors.date}</p>}
-          </div>
-          <div>
-            <label className="block mb-1 text-sm font-medium text-gray-700">Timer</label>
-            <input
+          )}
+        </Field>
+        <Field label="Timer" required error={errors.hours}>
+          {(field) => (
+            <Input
+              {...field}
               type="number"
+              inputMode="decimal"
+              min="0"
               step="0.25"
               value={form.hours}
               onChange={(e) => setField('hours', e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="1.5"
+              invalid={!!errors.hours}
+              placeholder="1,5"
             />
-            {errors.hours && <p className="text-red-600 text-sm mt-1">{errors.hours}</p>}
-          </div>
-        </div>
+          )}
+        </Field>
+        <Field label="Arbeidets art" required error={errors.type}>
+          {(field) => (
+            <Select
+              {...field}
+              value={selectedType}
+              onChange={(e) => setField('type', e.target.value)}
+              invalid={!!errors.type}
+            >
+              {categories.map((category) => (
+                <option key={category.id} value={category.name}>
+                  {category.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      </div>
 
-        {message && <p className="text-sm text-gray-700">{message}</p>}
+      <Field label="Beskrivelse" required error={errors.description}>
+        {(field) => (
+          <Textarea
+            {...field}
+            value={form.description}
+            onChange={(e) => setField('description', e.target.value)}
+            invalid={!!errors.description}
+            rows={3}
+            placeholder="Hva ble gjort?"
+          />
+        )}
+      </Field>
 
-        <button
-          type="submit"
-          disabled={submitting || loading}
-          className="px-3 py-2 rounded bg-blue-600 text-white disabled:opacity-50"
-        >
-          {submitting ? 'Lagrer...' : 'Registrer'}
-        </button>
-      </form>
-    </div>
+      <Button type="submit" size="lg" loading={submitting} disabled={loading}>
+        Registrer og godkjenn
+      </Button>
+    </form>
   );
 };
 

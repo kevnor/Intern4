@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../../server/supabaseClient';
+import { clearSignedUrlCache } from '../../../server/storage';
 
 export type AuthUser = {
   id: string;
@@ -79,6 +80,7 @@ export const useProvideAuth = (): UseAuthReturn => {
       if (!isMounted) return;
 
       if (!session?.user) {
+        clearSignedUrlCache();
         setUser(null);
         setLoading(false);
         return;

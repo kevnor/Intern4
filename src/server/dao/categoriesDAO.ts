@@ -89,20 +89,12 @@ export async function deleteCategory(categoryId: string): Promise<void> {
   if (error) throw new Error(`Could not delete category: ${error.message}`);
 }
 
-export async function getCategoryUsageCount(categoryName: string): Promise<number> {
-  const { data: cat, error: e1 } = await supabase
-    .from('work_categories')
-    .select('id')
-    .eq('name', categoryName)
-    .maybeSingle();
-  if (e1) throw new Error(`Could not get category: ${e1.message}`);
-  if (!cat) return 0;
-
-  const { count, error: e2 } = await supabase
+export async function getCategoryUsageCount(categoryId: string): Promise<number> {
+  const { count, error } = await supabase
     .from('work_items')
     .select('*', { count: 'exact', head: true })
-    .eq('work_category_id', cat.id)
+    .eq('work_category_id', Number(categoryId))
     .eq('type', 'task');
-  if (e2) throw new Error(`Could not get category usage count: ${e2.message}`);
+  if (error) throw new Error(`Could not get category usage count: ${error.message}`);
   return count ?? 0;
 }

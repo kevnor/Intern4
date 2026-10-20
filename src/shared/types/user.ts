@@ -59,6 +59,7 @@ export const UpdateUserInputSchema = z.object({
   roomNumber: UserSchema.shape.roomNumber.optional(),
   onLeave: UserSchema.shape.onLeave.optional(),
   isActive: UserSchema.shape.isActive.optional(),
+  roleId: z.string().optional(),
 });
 
 export type UpdateUserInput = z.infer<typeof UpdateUserInputSchema>;
@@ -83,6 +84,7 @@ export type ResidentDirectoryUser = {
   seniority: number;
   roomNumber: number | null;
   createdAt: string | null;
+  profilePicture?: string;
   role?: string;
   onLeave: boolean;
   isActive: boolean;

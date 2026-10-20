@@ -1,6 +1,6 @@
 {
   "short_name": "Internsiden",
-  "name": "Singsaker Stundenterhjem Internside",
+  "name": "Singsaker Studenterhjem Internside",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +20,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#8b1e3f",
+  "background_color": "#faf8f7"
 }

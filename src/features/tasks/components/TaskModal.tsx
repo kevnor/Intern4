@@ -1,15 +1,32 @@
 import React, { useState } from 'react';
-import { Calendar, CheckCircle2, Clock, Pencil, Trash2, User, Users, X } from 'lucide-react';
+import { Calendar, Clock, Pencil, Trash2, User, Users } from 'lucide-react';
+import {
+  Button,
+  CategoryBadge,
+  ConfirmDialog,
+  Modal,
+  StatusMessage,
+  TaskAssignmentBadge,
+} from '../../../shared/components';
 import { getTaskWorkflowState } from '../../../shared/types/regi/tasks';
 import { canManageTasks, canViewAllParticipants } from '../permissions';
 import { TaskModalProps } from './types';
-import { formatDateTime } from '../../../shared/utils/date';
+import { formatDeadline } from '../../../shared/utils/date';
+import { ParticipantMeter } from './TaskCard';
+
+const participantStatusMessages = {
+  joined: { tone: 'info', text: 'Du er påmeldt. Send inn når oppgaven er gjort.' },
+  submitted: { tone: 'warning', text: 'Sendt inn – venter på godkjenning.' },
+  approved: { tone: 'success', text: 'Godkjent som regi.' },
+  rejected: { tone: 'error', text: 'Avslått. Du kan sende inn på nytt.' },
+} as const;
 
 const TaskModal: React.FC<TaskModalProps> = ({
   task,
   onClose,
   currentUserId,
   userRole,
+  categoryColor,
   onJoinTask,
   onLeaveTask,
   onCompleteTask,
@@ -17,350 +34,175 @@ const TaskModal: React.FC<TaskModalProps> = ({
   onDeleteTask,
   participantNames = {},
 }) => {
-  const [isCompleting, setIsCompleting] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirming, setConfirming] = useState<'complete' | 'delete' | null>(null);
 
   if (!task) return null;
 
-  const formatDeadline = (deadline: NonNullable<TaskModalProps['task']>['deadline']) =>
-    formatDateTime(deadline, deadline ? 'Ugyldig dato' : 'Ingen frist');
+  const { currentParticipant, participantCount, isFull, canJoin, canLeave, canSubmitCompletion } =
+    getTaskWorkflowState(task, currentUserId);
+  const canManage = canManageTasks(userRole);
+  const statusMessage = currentParticipant
+    ? participantStatusMessages[currentParticipant.status]
+    : null;
 
-  const {
-    currentParticipant,
-    participantCount,
-    isFull: taskIsFull,
-    canJoin,
-    canLeave,
-    canSubmitCompletion,
-  } = getTaskWorkflowState(task, currentUserId);
-
-  const handleJoin = () => {
-    if (onJoinTask && task.id) {
-      onJoinTask(task.id);
-    }
-  };
-
-  const handleLeave = () => {
-    if (canLeave && onLeaveTask && task.id) {
-      onLeaveTask(task.id);
-    }
-  };
-
-  const startComplete = () => {
-    setIsCompleting(true);
-  };
-
-  const cancelComplete = () => {
-    setIsCompleting(false);
-  };
-
-  const confirmComplete = () => {
-    if (canSubmitCompletion && onCompleteTask && task.id) {
-      onCompleteTask(task.id);
-    }
-    setIsCompleting(false);
-  };
-
-  const startDelete = () => {
-    setIsDeleting(true);
-  };
-
-  const cancelDelete = () => {
-    setIsDeleting(false);
-  };
-
-  const confirmDelete = () => {
-    if (onDeleteTask && task.id) {
-      onDeleteTask(task.id);
-    }
-    setIsDeleting(false);
-  };
-
-  const getCategoryColor = (category: string) => {
-    // FIXME: remove hardcoded
-    const colors: { [key: string]: string } = {
-      Generelt: 'bg-blue-100 text-blue-800 border-blue-200',
-      Dataarbeid: 'bg-purple-100 text-purple-800 border-purple-200',
-      Kjøkken: 'bg-green-100 text-green-800 border-green-200',
-      Vedlikehold: 'bg-orange-100 text-orange-800 border-orange-200',
-      Arrangement: 'bg-pink-100 text-pink-800 border-pink-200',
-    };
-    return colors[category] || 'bg-gray-100 text-gray-800 border-gray-200';
-  };
+  const details = [
+    {
+      icon: User,
+      label: 'Kontaktperson',
+      value: task.contactPersonId
+        ? (participantNames[task.contactPersonId] ?? 'Ukjent bruker')
+        : '–',
+    },
+    {
+      icon: Calendar,
+      label: 'Frist',
+      value: formatDeadline(task.deadline),
+    },
+    {
+      icon: Clock,
+      label: 'Estimert tid',
+      value: task.hourEstimate ? `${task.hourEstimate} timer` : 'Ikke spesifisert',
+    },
+    { icon: Users, label: 'Deltakere', value: <ParticipantMeter task={task} /> },
+  ];
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
-      onMouseDown={onClose}
-      role="presentation"
-    >
-      <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-        onMouseDown={(event) => event.stopPropagation()}
+    <>
+      <Modal
+        open
+        onClose={onClose}
+        size="lg"
+        fullScreenOnMobile
+        title={task.title}
+        description={<CategoryBadge name={task.category} color={categoryColor} />}
+        footer={
+          <>
+            {canManage && (onEditTask || onDeleteTask) && (
+              <div className="flex gap-2 sm:mr-auto">
+                {onEditTask && (
+                  <Button
+                    variant="ghost"
+                    icon={<Pencil aria-hidden="true" className="h-4 w-4" />}
+                    onClick={() => onEditTask(task)}
+                    className="flex-1 sm:flex-none"
+                  >
+                    Rediger
+                  </Button>
+                )}
+                {onDeleteTask && (
+                  <Button
+                    variant="ghost"
+                    icon={<Trash2 aria-hidden="true" className="h-4 w-4" />}
+                    onClick={() => setConfirming('delete')}
+                    className="flex-1 text-danger hover:bg-danger-subtle hover:text-danger sm:flex-none"
+                  >
+                    Slett
+                  </Button>
+                )}
+              </div>
+            )}
+            {canLeave && onLeaveTask && (
+              <Button variant="secondary" onClick={() => onLeaveTask(task.id)}>
+                Meld deg av
+              </Button>
+            )}
+            {canSubmitCompletion && onCompleteTask && (
+              <Button variant="success" onClick={() => setConfirming('complete')}>
+                Send inn til godkjenning
+              </Button>
+            )}
+            {canJoin && onJoinTask && (
+              <Button onClick={() => onJoinTask(task.id)}>Meld deg på</Button>
+            )}
+          </>
+        }
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <h2 className="text-xl font-semibold text-gray-900">{task.title}</h2>
-            <span
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getCategoryColor(task.category)}`}
-            >
-              {task.category}
-            </span>
-          </div>
-          <div className="flex items-center space-x-2">
-            {canManageTasks(userRole) && onEditTask && (
-              <button
-                onClick={() => onEditTask(task)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-                title="Rediger oppgave"
-              >
-                <Pencil className="w-5 h-5" />
-              </button>
-            )}
-            {canManageTasks(userRole) && (
-              <button
-                onClick={startDelete}
-                className="text-red-400 hover:text-red-600 transition-colors"
-                title="Slett oppgave"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main content */}
-            <div className="lg:col-span-2 space-y-4">
-              <div>
-                <h3 className="text-sm font-medium text-gray-900 mb-2">Beskrivelse</h3>
-                <p className="text-gray-700 leading-relaxed">
-                  {task.description || 'Ingen beskrivelse tilgjengelig.'}
-                </p>
-              </div>
-
-              {/* Participants section */}
-              <div>
-                <h3 className="text-sm font-medium text-gray-900 mb-2 flex items-center">
-                  <Users className="w-4 h-4 mr-1" />
-                  Deltakere ({participantCount}/{task.maxParticipants})
-                </h3>
-
-                {canViewAllParticipants(userRole) ? (
-                  <div className="space-y-2">
-                    {participantCount > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {task.participants.map((participant) => (
-                          <div
-                            key={participant.assignmentId}
-                            className="flex items-center space-x-2 p-2 bg-gray-50 rounded-md"
-                          >
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                              <User className="w-4 h-4 text-blue-600" />
-                            </div>
-                            <span className="text-sm font-medium text-gray-900">
-                              {participantNames[participant.userId] || 'Ukjent bruker'}
-                            </span>
-                            {participant.userId === currentUserId && (
-                              <span className="text-xs text-blue-600">(deg)</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-500 italic">Ingen deltakere </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="text-sm text-gray-600">
-                      {participantCount} person{participantCount !== 1 ? 'er' : ''} påmeldt av{' '}
-                      {task.maxParticipants} plasser
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-4">
-              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                <div className="flex items-center space-x-2 text-sm">
-                  <User className="w-4 h-4 text-gray-500" />
-                  <span className="font-medium text-gray-700">Kontaktperson:</span>
-                </div>
-                <p className="text-sm text-gray-900 ml-6">
-                  {task.contactPersonId
-                    ? (participantNames[task.contactPersonId] ?? 'Ukjent bruker')
-                    : '-'}
-                </p>
-
-                <div className="flex items-center space-x-2 text-sm">
-                  <Calendar className="w-4 h-4 text-gray-500" />
-                  <span className="font-medium text-gray-700">Frist:</span>
-                </div>
-                <p className="text-sm text-gray-900 ml-6">{formatDeadline(task.deadline)}</p>
-
-                <div className="flex items-center space-x-2 text-sm">
-                  <Clock className="w-4 h-4 text-gray-500" />
-                  <span className="font-medium text-gray-700">Estimert tid:</span>
-                </div>
-                <p className="text-sm text-gray-900 ml-6">
-                  {task.hourEstimate ? `${task.hourEstimate} timer` : 'Ikke spesifisert'}
-                </p>
-
-                <div className="flex items-center space-x-2 text-sm">
-                  <Users className="w-4 h-4 text-gray-500" />
-                  <span className="font-medium text-gray-700">Kapasitet:</span>
-                </div>
-                <p className="text-sm text-gray-900 ml-6">Maks {task.maxParticipants} personer</p>
-              </div>
-
-              {/* Status indicators */}
-              <div className="space-y-2">
-                {currentParticipant?.status === 'approved' && (
-                  <div className="flex items-center space-x-2 p-2 bg-green-50 border border-green-200 rounded-md">
-                    <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    <span className="text-sm font-medium text-green-800">Godkjent som regi</span>
-                  </div>
-                )}
-
-                {taskIsFull && !currentParticipant && (
-                  <div className="flex items-center space-x-2 p-2 bg-red-50 border border-red-200 rounded-md">
-                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-red-800">Full</span>
-                  </div>
-                )}
-
-                {currentParticipant?.status === 'joined' && (
-                  <div className="flex items-center space-x-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-blue-800">Du er påmeldt</span>
-                  </div>
-                )}
-
-                {currentParticipant?.status === 'submitted' && (
-                  <div className="flex items-center space-x-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
-                    <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-yellow-800">
-                      Sendt inn til godkjenning
-                    </span>
-                  </div>
-                )}
-
-                {currentParticipant?.status === 'rejected' && (
-                  <div className="flex items-center space-x-2 p-2 bg-red-50 border border-red-200 rounded-md">
-                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-red-800">
-                      Avvist, send inn på nytt
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer / Actions */}
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
-          {isCompleting ? (
-            <div className="space-y-4">
-              <div className="text-center">
-                <p className="text-sm text-gray-700">
-                  Er du sikker på at du vil sende denne oppgaven inn til godkjenning?
-                </p>
-              </div>
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={cancelComplete}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                >
-                  Avbryt
-                </button>
-                <button
-                  onClick={confirmComplete}
-                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
-                >
-                  Send inn til godkjenning
-                </button>
-              </div>
-            </div>
-          ) : isDeleting ? (
-            <div className="space-y-4">
-              <div className="text-center">
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-3">
-                  <Trash2 className="h-6 w-6 text-red-600" />
-                </div>
-                <p className="text-sm font-medium text-gray-900">Slett oppgave</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Er du sikker på at du vil slette oppgaven? Denne handlingen kan ikke angres.
-                </p>
-              </div>
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={cancelDelete}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                >
-                  Avbryt
-                </button>
-                <button
-                  onClick={confirmDelete}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                >
-                  Slett oppgave
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex justify-between items-center">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-              >
-                Lukk
-              </button>
-
-              <div className="flex space-x-3">
-                {canJoin && onJoinTask && (
-                  <button
-                    onClick={handleJoin}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                  >
-                    Meld deg på
-                  </button>
-                )}
-
-                {canSubmitCompletion && onCompleteTask && (
-                  <button
-                    onClick={startComplete}
-                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
-                  >
-                    Send inn til godkjenning
-                  </button>
-                )}
-                {canLeave && onLeaveTask && (
-                  <button
-                    onClick={handleLeave}
-                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                  >
-                    Meld deg av
-                  </button>
-                )}
-              </div>
-            </div>
+        <div className="space-y-6">
+          {statusMessage && (
+            <StatusMessage tone={statusMessage.tone}>{statusMessage.text}</StatusMessage>
           )}
+          {isFull && !currentParticipant && (
+            <StatusMessage tone="warning">Oppgaven er full.</StatusMessage>
+          )}
+
+          <dl className="grid grid-cols-1 gap-3 rounded-2xl bg-surface-muted p-4 sm:grid-cols-2">
+            {details.map(({ icon: Icon, label, value }) => (
+              <div key={label} className="flex items-start gap-3">
+                <Icon aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-subtle" />
+                <div className="min-w-0">
+                  <dt className="text-xs font-medium text-muted">{label}</dt>
+                  <dd className="text-sm text-fg">{value}</dd>
+                </div>
+              </div>
+            ))}
+          </dl>
+
+          <section>
+            <h3 className="mb-2 text-sm font-semibold">Beskrivelse</h3>
+            <p className="whitespace-pre-line leading-relaxed text-muted">
+              {task.description || 'Ingen beskrivelse.'}
+            </p>
+          </section>
+
+          <section>
+            <h3 className="mb-2 text-sm font-semibold">
+              Deltakere ({participantCount}/{task.maxParticipants})
+            </h3>
+            {!canViewAllParticipants(userRole) ? (
+              <p className="text-sm text-muted">
+                {participantCount} av {task.maxParticipants} plasser er tatt.
+              </p>
+            ) : participantCount === 0 ? (
+              <p className="text-sm text-subtle">Ingen deltakere ennå.</p>
+            ) : (
+              <ul className="divide-y divide-border rounded-2xl border border-border">
+                {task.participants.map((participant) => (
+                  <li
+                    key={participant.assignmentId}
+                    className="flex items-center justify-between gap-3 px-4 py-2.5"
+                  >
+                    <span className="truncate text-sm font-medium">
+                      {participantNames[participant.userId] || 'Ukjent bruker'}
+                      {participant.userId === currentUserId && (
+                        <span className="ml-1 font-normal text-subtle">(deg)</span>
+                      )}
+                    </span>
+                    <TaskAssignmentBadge status={participant.status} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
-      </div>
-    </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={confirming === 'complete'}
+        title="Send inn til godkjenning?"
+        confirmLabel="Send inn"
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => {
+          setConfirming(null);
+          onCompleteTask?.(task.id);
+        }}
+      >
+        {task.hourEstimate} timer blir registrert som regi når regisjefen godkjenner.
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirming === 'delete'}
+        title="Slette oppgaven?"
+        confirmLabel="Slett oppgave"
+        tone="danger"
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => {
+          setConfirming(null);
+          onDeleteTask?.(task.id);
+        }}
+      >
+        «{task.title}» og alle påmeldinger slettes. Dette kan ikke angres.
+      </ConfirmDialog>
+    </>
   );
 };
 
