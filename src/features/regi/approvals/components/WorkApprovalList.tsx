@@ -172,6 +172,11 @@ const WorkApprovalList: React.FC<WorkApprovalListProps> = ({
                   {approval.title}
                 </button>
               </h3>
+              {approval.roomNumber ? (
+                <p className="mt-1">
+                  <Badge>Rom {approval.roomNumber}</Badge>
+                </p>
+              ) : null}
               {approval.description && (
                 <p className="mt-1 line-clamp-2 text-sm text-muted">{approval.description}</p>
               )}
@@ -214,6 +219,7 @@ const WorkApprovalList: React.FC<WorkApprovalListProps> = ({
                     {approval.title}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    {approval.roomNumber ? <Badge>Rom {approval.roomNumber}</Badge> : null}
                     <CategoryBadge
                       name={approval.category}
                       color={categoryColors[approval.category]}

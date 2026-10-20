@@ -105,6 +105,7 @@ export async function addRegiLog(
       description: data.description ?? null,
       type: 'misc',
       work_category_id: catId,
+      room_id: data.roomId ?? null,
     })
     .select('id')
     .single();
@@ -146,7 +147,7 @@ export async function getRegiLogsByUser(userId: string): Promise<RegiLogWithId[]
   const { data, error } = await supabase
     .from('work_assignments')
     .select(
-      'id, work_id, hours_used, created_at, performed_at, approved_state, approval_comment, work_items(title, description, type, work_categories(name), work_misc(image_paths))'
+      'id, work_id, hours_used, created_at, performed_at, approved_state, approval_comment, work_items(title, description, type, work_categories(name), work_misc(image_paths), rooms(number))'
     )
     .eq('user_uuid', userId)
     .order('performed_at', { ascending: false })
@@ -224,7 +225,7 @@ export async function getPendingRegiApprovals(): Promise<PendingRegiApproval[]> 
   const { data, error } = await supabase
     .from('work_assignments')
     .select(
-      'id, user_uuid, hours_used, created_at, performed_at, approved_state, work_items(title, description, type, work_categories(name), work_misc(image_paths))'
+      'id, user_uuid, hours_used, created_at, performed_at, approved_state, work_items(title, description, type, work_categories(name), work_misc(image_paths), rooms(number))'
     )
     .eq('approved_state', 0)
     .order('performed_at', { ascending: false })
@@ -251,7 +252,7 @@ export async function getAllRegiLogs(range?: {
   let query = supabase
     .from('work_assignments')
     .select(
-      'id, user_uuid, hours_used, created_at, performed_at, approved_state, approval_comment, approved_by_uuid, work_items(title, description, type, work_categories(name), work_misc(image_paths))'
+      'id, user_uuid, hours_used, created_at, performed_at, approved_state, approval_comment, approved_by_uuid, work_items(title, description, type, work_categories(name), work_misc(image_paths), rooms(number))'
     );
   if (range) {
     query = query

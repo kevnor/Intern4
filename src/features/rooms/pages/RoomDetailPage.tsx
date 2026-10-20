@@ -2,11 +2,13 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import RoomHistoryList from '../components/RoomHistoryList';
 import ReportList from '../components/ReportList';
+import RoomWorkList, { totalApprovedHours } from '../components/RoomWorkList';
 import RoomManageCard from '../components/RoomManageCard';
 import { useAuth } from '../../../app/providers/AuthContext';
 import { useRoomHistory } from '../hooks/useOccupancyHistory';
 import { useRoomAdmin } from '../hooks/useRoomAdmin';
 import { useRoomReports } from '../hooks/useRoomReports';
+import { useRoomWork } from '../hooks/useRoomWork';
 import { canHandleReports } from '../reports';
 import { useRooms } from '../hooks/useRooms';
 import { canManageRooms } from '../permissions';
@@ -15,7 +17,7 @@ import { ROOM_PATHS } from '../paths';
 import { residentProfilePath } from '../../residents/paths';
 import { PageLayout } from '../../../shared/layouts';
 import { Badge, Card, EmptyState, Skeleton, StatusMessage } from '../../../shared/components';
-import { formatDate } from '../../../shared/utils/date';
+import { formatDate, formatHours } from '../../../shared/utils/date';
 
 const RoomDetailPage = () => {
   const { number } = useParams();
@@ -31,6 +33,7 @@ const RoomDetailPage = () => {
   });
   const admin = useRoomAdmin({ enabled: isManager, rooms, reloadRooms: reload });
   // Moving someone in or out changes the history, so it is reloaded along with who lives here.
+  const roomWork = useRoomWork(room?.id);
   const history = useRoomHistory(
     room?.id,
     room?.occupants.map((occupant) => occupant.userId).join(',')
@@ -117,6 +120,23 @@ const RoomDetailPage = () => {
           )}
         </Card>
       </div>
+
+      <Card
+        title="Utført arbeid"
+        description={
+          roomWork.work.length > 0
+            ? `${formatHours(totalApprovedHours(roomWork.work))} godkjent regi på rommet.`
+            : 'Regi som er gjort på rommet.'
+        }
+      >
+        {roomWork.loading ? (
+          <Skeleton className="h-16" />
+        ) : roomWork.error ? (
+          <p className="text-sm text-danger">{roomWork.error}</p>
+        ) : (
+          <RoomWorkList work={roomWork.work} />
+        )}
+      </Card>
 
       {reports.reports.length > 0 && (
         <Card title="Meldinger" description="Problemer meldt for rommet.">

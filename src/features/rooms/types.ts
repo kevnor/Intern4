@@ -56,3 +56,14 @@ export type RoomReport = {
   createdAt: Date;
   resolvedAt: Date | null;
 };
+
+// Regi work done on a room. Pending work still needs Regisjef's confirmation.
+export type RoomWork = {
+  id: string;
+  title: string;
+  isTask: boolean;
+  hours: number;
+  performedAt: Date;
+  userName: string;
+  approved: boolean;
+};

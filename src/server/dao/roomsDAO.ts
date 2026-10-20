@@ -6,6 +6,7 @@ import type {
   Room,
   RoomOccupant,
   RoomType,
+  RoomWork,
 } from '../../features/rooms/types';
 import { parseDateColumnValue } from '../../shared/utils/date';
 
@@ -178,4 +179,44 @@ export async function setHusfar(userId: string, isHusfar: boolean): Promise<void
     p_is_husfar: isHusfar,
   });
   if (error) throw new Error(error.message);
+}
+
+type WorkRow = {
+  id: string | number;
+  hours_used: number | string | null;
+  performed_at: string;
+  approved_state: number;
+  users?: NameRelation;
+  work_items?:
+    | { title?: string | null; type?: string | null }
+    | { title?: string | null; type?: string | null }[]
+    | null;
+};
+
+// Regi work done on the room: confirmed work and work still waiting for Regisjef. Rejected work
+// is left out. A task only counts once someone has sent in hours for it.
+export async function getRoomWork(roomId: string): Promise<RoomWork[]> {
+  const { data, error } = await supabase
+    .from('work_assignments')
+    .select(
+      'id, hours_used, performed_at, approved_state, users!work_assignments_user_uuid_fkey(name), work_items!inner(title, type, room_id)'
+    )
+    .eq('work_items.room_id', roomId)
+    .in('approved_state', [0, 1])
+    .not('hours_used', 'is', null)
+    .order('performed_at', { ascending: false });
+  if (error) throw new Error(`Could not get room work: ${error.message}`);
+
+  return ((data ?? []) as unknown as WorkRow[]).map((row) => {
+    const item = Array.isArray(row.work_items) ? row.work_items[0] : row.work_items;
+    return {
+      id: String(row.id),
+      title: item?.title ?? 'Arbeid',
+      isTask: item?.type === 'task',
+      hours: Number(row.hours_used) || 0,
+      performedAt: parseDateColumnValue(row.performed_at),
+      userName: getName(row.users),
+      approved: row.approved_state === 1,
+    };
+  });
 }

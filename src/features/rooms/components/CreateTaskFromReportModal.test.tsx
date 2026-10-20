@@ -77,6 +77,8 @@ describe('CreateTaskFromReportModal', () => {
         deadline: undefined,
         hourEstimate: 3,
         maxParticipants: 2,
+        // The task is about the room the report came from.
+        roomId: 'room',
       })
     );
     expect(onClose).toHaveBeenCalled();

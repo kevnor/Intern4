@@ -3,6 +3,7 @@ import {
   assignResidentToRoom,
   getResidentsForRooms,
   getRoomHistory,
+  getRoomWork,
   getRooms,
   getUserRoomHistory,
   setHusfar,
@@ -18,7 +19,7 @@ vi.mock('../supabaseClient', () => ({ supabase: { from: vi.fn(), rpc: vi.fn() } 
 // A chainable stand-in for the query builder that resolves to `result` when awaited.
 const builder = (result: { data?: unknown; error?: { message: string } | null }) => {
   const chain: Record<string, unknown> = {};
-  for (const method of ['select', 'order', 'is', 'eq', 'update', 'gte', 'lte']) {
+  for (const method of ['select', 'order', 'is', 'eq', 'update', 'gte', 'lte', 'in', 'not']) {
     chain[method] = vi.fn(() => chain);
   }
   chain.then = (resolve: (value: unknown) => unknown) =>
@@ -173,5 +174,56 @@ describe('roomsDAO', () => {
       error: { message: 'Husfarhybelen er opptatt av Bo. Flytt dem først' },
     } as never);
     await expect(setHusfar('b', true)).rejects.toThrow('Husfarhybelen er opptatt');
+  });
+
+  it('reads confirmed and waiting regi work done on a room', async () => {
+    const chain = builder({
+      data: [
+        {
+          id: 7,
+          hours_used: 2.5,
+          performed_at: '2026-10-05',
+          approved_state: 1,
+          users: { name: 'Anne' },
+          work_items: { title: 'Malte veggen', type: 'misc' },
+        },
+        {
+          id: 8,
+          hours_used: '1',
+          performed_at: '2026-10-09',
+          approved_state: 0,
+          users: [{ name: 'Bo' }],
+          work_items: [{ title: 'Ødelagt lås', type: 'task' }],
+        },
+      ],
+    });
+    vi.mocked(supabase.from).mockReturnValue(chain as never);
+
+    const work = await getRoomWork('room-1');
+
+    expect(chain.eq).toHaveBeenCalledWith('work_items.room_id', 'room-1');
+    // Rejected work and tasks nobody has sent hours for are not asked for.
+    expect(chain.in).toHaveBeenCalledWith('approved_state', [0, 1]);
+    expect(chain.not).toHaveBeenCalledWith('hours_used', 'is', null);
+    expect(work).toEqual([
+      {
+        id: '7',
+        title: 'Malte veggen',
+        isTask: false,
+        hours: 2.5,
+        performedAt: new Date(2026, 9, 5),
+        userName: 'Anne',
+        approved: true,
+      },
+      {
+        id: '8',
+        title: 'Ødelagt lås',
+        isTask: true,
+        hours: 1,
+        performedAt: new Date(2026, 9, 9),
+        userName: 'Bo',
+        approved: false,
+      },
+    ]);
   });
 });

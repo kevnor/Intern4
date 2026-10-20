@@ -137,6 +137,7 @@ export async function addTask(data: TaskCreationData): Promise<string> {
       description: data.description ?? null,
       type: 'task',
       work_category_id: cat.id,
+      room_id: data.roomId ?? null,
     })
     .select('id')
     .single();

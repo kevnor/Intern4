@@ -19,6 +19,8 @@ export type RegiRecordBase = {
   createdAt: Date;
   sourceType: RegiSourceType;
   imagePaths?: string[];
+  // The room the work was done on, when there is one.
+  roomNumber?: number;
 };
 
 export type RegiUserSummary = {
@@ -39,6 +41,7 @@ export const RegiLogSchema = z.object({
   reviewerComment: z.string().optional(),
   imageUrl: z.url().optional(),
   imagePaths: z.array(z.string()).optional(),
+  roomId: z.string().optional(),
 });
 export type RegiLog = z.infer<typeof RegiLogSchema>;
 

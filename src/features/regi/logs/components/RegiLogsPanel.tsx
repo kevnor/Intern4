@@ -164,6 +164,7 @@ const RegiLogsPanel: React.FC<{ categoryColors?: Record<string, string> }> = ({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-semibold">{log.title}</p>
+                  {log.roomNumber ? <Badge>Rom {log.roomNumber}</Badge> : null}
                   <p className="text-sm text-muted">
                     {log.userName} · {formatDate(log.date)}
                   </p>
@@ -198,6 +199,7 @@ const RegiLogsPanel: React.FC<{ categoryColors?: Record<string, string> }> = ({
                 <div className="max-w-xs">
                   <div className="truncate">{log.title}</div>
                   <div className="mt-1 flex flex-wrap gap-1.5">
+                    {log.roomNumber ? <Badge>Rom {log.roomNumber}</Badge> : null}
                     <CategoryBadge name={log.category} color={categoryColors[log.category]} />
                     {log.sourceType === 'task' && <Badge tone="info">Oppgave</Badge>}
                   </div>

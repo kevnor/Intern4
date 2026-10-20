@@ -83,6 +83,7 @@ const CreateTaskFromReportModal = ({
       deadline: deadline ? new Date(`${deadline}T12:00:00`) : undefined,
       hourEstimate: estimate,
       maxParticipants: participants,
+      roomId: report.roomId,
     });
     if (created) onClose();
   };
