@@ -33,7 +33,9 @@ describe('ClaimShiftModal', () => {
     );
 
     expect(screen.getByText('Kari')).toBeInTheDocument();
-    expect(screen.getByText(/150/)).toBeInTheDocument();
+    // The person giving the shift away pays the one who takes it.
+    expect(screen.getByText('Du får')).toBeInTheDocument();
+    expect(screen.getByText(/150.*kr fra Kari/)).toBeInTheDocument();
     expect(screen.getByText('Eksamen')).toBeInTheDocument();
     expect(screen.queryByText(/mindre enn 12 timer/)).not.toBeInTheDocument();
 

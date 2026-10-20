@@ -61,7 +61,7 @@ describe('SwapsTab', () => {
     const { onClaim } = renderTab([open, shift({ id: 'own', userId: 'me' })]);
 
     expect(screen.getByText('Kari · Eksamen')).toBeInTheDocument();
-    expect(screen.getByText(/150/)).toBeInTheDocument();
+    expect(screen.getByText(/Du får.*150/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Ta vakt/ }));
 
@@ -90,13 +90,20 @@ describe('SwapsTab', () => {
       [],
       [
         entry({}),
-        entry({ id: 'l2', fromUserId: 'kari', toUserId: 'me', toUserName: 'Meg', amount: 50 }),
+        entry({
+          id: 'l2',
+          fromUserId: 'kari',
+          fromUserName: 'Kari',
+          toUserId: 'me',
+          toUserName: 'Meg',
+          amount: 50,
+        }),
         entry({ id: 'l3', amount: null }),
       ]
     );
 
-    expect(screen.getByText(/Du betaler/)).toBeInTheDocument();
-    expect(screen.getByText(/Du får/)).toBeInTheDocument();
+    expect(screen.getByText(/Du betaler.*100.*til Kari/)).toBeInTheDocument();
+    expect(screen.getByText(/Du får.*50.*fra Kari/)).toBeInTheDocument();
     expect(screen.getByText('Uten betaling')).toBeInTheDocument();
 
     await user.click(screen.getAllByRole('checkbox', { name: 'Betalt' })[0]);

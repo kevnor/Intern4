@@ -42,9 +42,11 @@ const ClaimShiftModal = ({ shift, busy, restConflict, onClaim, onClose }: ClaimS
             <dd className="font-medium">{shift.userName ?? 'Ukjent'}</dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt className="text-muted">Tilbud</dt>
+            <dt className="text-muted">{shift.swapOfferAmount ? 'Du får' : 'Betaling'}</dt>
             <dd className="font-medium">
-              {shift.swapOfferAmount ? formatKroner(shift.swapOfferAmount) : 'Ingen betaling'}
+              {shift.swapOfferAmount
+                ? `${formatKroner(shift.swapOfferAmount)} fra ${shift.userName ?? 'ukjent'}`
+                : 'Ingen betaling'}
             </dd>
           </div>
           {shift.swapNote && (
@@ -56,7 +58,8 @@ const ClaimShiftModal = ({ shift, busy, restConflict, onClaim, onClose }: ClaimS
         </dl>
         {shift.swapOfferAmount ? (
           <p className="text-sm text-muted">
-            Pengene gjør dere opp utenfor appen. Dere kan begge krysse av når de er betalt.
+            Den som gir bort vakten betaler deg. Pengene gjør dere opp utenfor appen, og dere kan
+            begge krysse av når de er betalt.
           </p>
         ) : null}
         {restConflict && (

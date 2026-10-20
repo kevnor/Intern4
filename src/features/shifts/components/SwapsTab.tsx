@@ -66,7 +66,7 @@ const SwapsTab = ({
                   </p>
                 </div>
                 {shift.swapOfferAmount ? (
-                  <Badge tone="success">{formatKroner(shift.swapOfferAmount)}</Badge>
+                  <Badge tone="success">Du får {formatKroner(shift.swapOfferAmount)}</Badge>
                 ) : null}
                 <Button
                   size="sm"
@@ -93,7 +93,7 @@ const SwapsTab = ({
                   )}
                 </div>
                 {shift.swapOfferAmount ? (
-                  <Badge tone="success">{formatKroner(shift.swapOfferAmount)}</Badge>
+                  <Badge tone="success">Du betaler {formatKroner(shift.swapOfferAmount)}</Badge>
                 ) : null}
                 <Button variant="secondary" size="sm" onClick={() => onManageMine(shift)}>
                   Endre
@@ -128,7 +128,9 @@ const SwapsTab = ({
                   {entry.amount ? (
                     <>
                       <span className="text-sm tabular-nums">
-                        {gaveAway ? 'Du betaler' : 'Du får'} {formatKroner(entry.amount)}
+                        {gaveAway
+                          ? `Du betaler ${formatKroner(entry.amount)} til ${other ?? 'ukjent'}`
+                          : `Du får ${formatKroner(entry.amount)} fra ${other ?? 'ukjent'}`}
                       </span>
                       <Checkbox
                         label="Betalt"

@@ -98,6 +98,12 @@ const AdminTab = ({ admin }: AdminTabProps) => {
           </>
         }
       >
+        {stats.total > 0 && stats.drafts === 0 && (
+          <p className="text-sm text-muted">
+            Alle vakter er publisert, så det er ingenting å fordele eller nullstille. Bruk
+            Vaktplan-fanen for å endre enkeltvakter.
+          </p>
+        )}
         {lastRun && (
           <StatusMessage tone={lastRun.unfilled.length > 0 ? 'warning' : 'success'}>
             Fordelte {lastRun.assignments.length} vakter.
