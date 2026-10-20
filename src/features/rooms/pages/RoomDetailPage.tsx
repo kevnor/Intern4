@@ -1,10 +1,13 @@
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import RoomHistoryList from '../components/RoomHistoryList';
+import ReportList from '../components/ReportList';
 import RoomManageCard from '../components/RoomManageCard';
 import { useAuth } from '../../../app/providers/AuthContext';
 import { useRoomHistory } from '../hooks/useOccupancyHistory';
 import { useRoomAdmin } from '../hooks/useRoomAdmin';
+import { useRoomReports } from '../hooks/useRoomReports';
+import { canHandleReports } from '../reports';
 import { useRooms } from '../hooks/useRooms';
 import { canManageRooms } from '../permissions';
 import { formatRoomType, getFreeSpots } from '../rooms';
@@ -20,6 +23,12 @@ const RoomDetailPage = () => {
   const { rooms, loading, error, reload } = useRooms();
   const room = rooms.find((candidate) => String(candidate.number) === number);
   const isManager = canManageRooms(user?.role);
+  const lives = Boolean(room?.occupants.some((occupant) => occupant.userId === user?.id));
+  // Residents of the room and the people who handle reports see its reports.
+  const reports = useRoomReports({
+    roomId: room?.id,
+    enabled: Boolean(room) && (lives || canHandleReports(user?.role)),
+  });
   const admin = useRoomAdmin({ enabled: isManager, rooms, reloadRooms: reload });
   // Moving someone in or out changes the history, so it is reloaded along with who lives here.
   const history = useRoomHistory(
@@ -108,6 +117,12 @@ const RoomDetailPage = () => {
           )}
         </Card>
       </div>
+
+      {reports.reports.length > 0 && (
+        <Card title="Meldinger" description="Problemer meldt for rommet.">
+          <ReportList reports={reports.reports} emptyText="Ingen meldinger." />
+        </Card>
+      )}
 
       {isManager && <RoomManageCard room={room} admin={admin} />}
     </PageLayout>

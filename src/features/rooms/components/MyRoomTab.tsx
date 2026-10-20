@@ -1,12 +1,23 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { DoorOpen } from 'lucide-react';
+import { DoorOpen, Wrench } from 'lucide-react';
+import ReportList from './ReportList';
+import ReportProblemModal from './ReportProblemModal';
 import RoomHistoryList from './RoomHistoryList';
 import { useUserRoomHistory } from '../hooks/useOccupancyHistory';
+import { useRoomReports } from '../hooks/useRoomReports';
 import { formatRoomType, getRoomOfUser } from '../rooms';
 import { roomPath } from '../paths';
 import type { Room } from '../types';
 import { residentProfilePath } from '../../residents/paths';
-import { Badge, Card, EmptyState, Skeleton } from '../../../shared/components';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Skeleton,
+  StatusMessage,
+} from '../../../shared/components';
 import { formatDate } from '../../../shared/utils/date';
 
 type MyRoomTabProps = {
@@ -18,6 +29,8 @@ type MyRoomTabProps = {
 const MyRoomTab = ({ rooms, loading, userId }: MyRoomTabProps) => {
   const history = useUserRoomHistory(userId);
   const room = getRoomOfUser(rooms, userId);
+  const reports = useRoomReports({ roomId: room?.id, enabled: Boolean(room) });
+  const [reporting, setReporting] = useState(false);
   const roommates = room?.occupants.filter((occupant) => occupant.userId !== userId) ?? [];
   const since = room?.occupants.find((occupant) => occupant.userId === userId)?.movedIn;
 
@@ -69,6 +82,50 @@ const MyRoomTab = ({ rooms, loading, userId }: MyRoomTabProps) => {
         </EmptyState>
       )}
 
+      {room && (
+        <Card
+          title="Problemer på rommet"
+          description="Meld fra om noe må fikses. Regisjef kan lage en oppgave av det."
+          actions={
+            <Button
+              size="sm"
+              icon={<Wrench aria-hidden="true" className="h-4 w-4" />}
+              onClick={() => setReporting(true)}
+            >
+              Meld problem
+            </Button>
+          }
+        >
+          <div className="space-y-3">
+            {reports.error && (
+              <StatusMessage tone="error" onDismiss={reports.clearError}>
+                {reports.error}
+              </StatusMessage>
+            )}
+            {reports.loading ? (
+              <Skeleton className="h-16" />
+            ) : (
+              <ReportList
+                reports={reports.reports}
+                emptyText="Ingen meldinger for rommet."
+                renderActions={(report) =>
+                  report.status === 'open' && report.reportedBy === userId ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={reports.busy}
+                      onClick={() => void reports.withdraw(report.id)}
+                    >
+                      Trekk tilbake
+                    </Button>
+                  ) : null
+                }
+              />
+            )}
+          </div>
+        </Card>
+      )}
+
       <Card title="Dine rom" description="Rommene du har bodd i.">
         {history.loading ? (
           <Skeleton className="h-24" />
@@ -78,6 +135,17 @@ const MyRoomTab = ({ rooms, loading, userId }: MyRoomTabProps) => {
           <RoomHistoryList stays={history.stays} subject="room" emptyText="Ingen rom registrert." />
         )}
       </Card>
+
+      {room && reporting && (
+        <ReportProblemModal
+          roomNumber={room.number}
+          busy={reports.busy}
+          onSubmit={(title, description) =>
+            reports.report({ roomId: room.id, reportedBy: userId, title, description })
+          }
+          onClose={() => setReporting(false)}
+        />
+      )}
     </div>
   );
 };

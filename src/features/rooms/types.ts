@@ -39,3 +39,20 @@ export type ResidentForRoom = {
   roomNumber: number;
   isHusfar: boolean;
 };
+
+export type RoomReportStatus = 'open' | 'task_created' | 'resolved' | 'dismissed';
+
+export type RoomReport = {
+  id: string;
+  roomId: string;
+  roomNumber: number;
+  reportedBy: string;
+  reporterName: string;
+  title: string;
+  description: string | null;
+  status: RoomReportStatus;
+  // The regi task made from the report, once there is one.
+  workItemId: string | null;
+  createdAt: Date;
+  resolvedAt: Date | null;
+};

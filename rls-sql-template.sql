@@ -34,7 +34,8 @@ BEGIN
         'vakt_unavailability',
         'vakt_swap_log',
         'rooms',
-        'room_occupancies'
+        'room_occupancies',
+        'room_reports'
       )
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I', _pol, _tbl);
@@ -592,3 +593,45 @@ CREATE POLICY "Authenticated users can read room occupancies"
   ON room_occupancies FOR SELECT
   TO authenticated
   USING (true);
+
+-- ============================================================
+-- ROOM REPORTS TABLE
+-- ============================================================
+-- Problems in a room. Residents report for the room they live in
+-- (public.is_room_occupant); Admin, Data, Regisjef and Romsjef
+-- (public.is_room_report_manager) read and handle them. Created by
+-- migration 20261020200000_add_room_reports, which also limits the
+-- column privileges: only status and work_item_id can be updated.
+-- ============================================================
+
+ALTER TABLE room_reports ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Residents and managers can read room reports"
+  ON room_reports FOR SELECT
+  TO authenticated
+  USING (
+    reported_by = auth.uid()
+    OR public.is_room_occupant(room_id)
+    OR public.is_room_report_manager()
+  );
+
+CREATE POLICY "Residents can report problems in their own room"
+  ON room_reports FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    reported_by = auth.uid()
+    AND status = 'open'
+    AND work_item_id IS NULL
+    AND public.is_room_occupant(room_id)
+  );
+
+CREATE POLICY "Managers can handle room reports"
+  ON room_reports FOR UPDATE
+  TO authenticated
+  USING (public.is_room_report_manager())
+  WITH CHECK (public.is_room_report_manager());
+
+CREATE POLICY "Reporters can withdraw open reports"
+  ON room_reports FOR DELETE
+  TO authenticated
+  USING (reported_by = auth.uid() AND status = 'open');

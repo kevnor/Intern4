@@ -2,18 +2,22 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../app/providers/AuthContext';
 import AllRoomsTab from '../components/AllRoomsTab';
 import MyRoomTab from '../components/MyRoomTab';
+import ReportsTab from '../components/ReportsTab';
 import RoomAdminTab from '../components/RoomAdminTab';
 import { useRoomAdmin } from '../hooks/useRoomAdmin';
+import { useRoomReports } from '../hooks/useRoomReports';
 import { useRooms } from '../hooks/useRooms';
 import { ROOM_PATHS } from '../paths';
 import { canManageRooms } from '../permissions';
+import { canCreateTaskFromReport, canHandleReports, isActiveReport } from '../reports';
 import { PageLayout } from '../../../shared/layouts';
 import { SectionTabs, Spinner, StatusMessage } from '../../../shared/components';
 
 const TABS = [
   { key: 'mine', label: 'Mitt rom', path: ROOM_PATHS.MINE },
   { key: 'all', label: 'Alle rom', path: ROOM_PATHS.ALL },
-  { key: 'admin', label: 'Administrer', path: ROOM_PATHS.ADMIN, managerOnly: true },
+  { key: 'reports', label: 'Meldinger', path: ROOM_PATHS.REPORTS, access: 'reports' },
+  { key: 'admin', label: 'Administrer', path: ROOM_PATHS.ADMIN, access: 'rooms' },
 ] as const;
 
 const RoomsHubPage = () => {
@@ -22,12 +26,17 @@ const RoomsHubPage = () => {
   const navigate = useNavigate();
   const { rooms, loading, error, reload } = useRooms();
   const isManager = canManageRooms(user?.role);
+  const handlesReports = canHandleReports(user?.role);
+  const reports = useRoomReports({ enabled: handlesReports });
   const admin = useRoomAdmin({ enabled: isManager, rooms, reloadRooms: reload });
 
   if (authLoading) return <Spinner label="Laster..." />;
   if (!user) return null;
 
-  const tabs = TABS.filter((tab) => isManager || !('managerOnly' in tab));
+  const tabs = TABS.filter((tab) => {
+    if (!('access' in tab)) return true;
+    return tab.access === 'rooms' ? isManager : handlesReports;
+  });
   const path = pathname.replace(/\/$/, '');
   const activeTab = tabs.find((tab) => tab.path === path);
   if (!activeTab) return <Navigate to={ROOM_PATHS.MINE} replace />;
@@ -39,7 +48,11 @@ const RoomsHubPage = () => {
         tabs={tabs.map((tab) => ({
           key: tab.key,
           label: tab.label,
-          separated: 'managerOnly' in tab,
+          separated: 'access' in tab && tab.key === 'reports',
+          count:
+            tab.key === 'reports'
+              ? reports.reports.filter(isActiveReport).length || undefined
+              : undefined,
         }))}
         activeKey={activeTab.key}
         onChange={(key) => navigate(tabs.find((tab) => tab.key === key)!.path)}
@@ -51,6 +64,9 @@ const RoomsHubPage = () => {
         {activeTab.key === 'mine' && <MyRoomTab rooms={rooms} loading={loading} userId={user.id} />}
         {activeTab.key === 'all' && (
           <AllRoomsTab rooms={rooms} loading={loading} onRefresh={() => void reload()} />
+        )}
+        {activeTab.key === 'reports' && (
+          <ReportsTab reports={reports} canCreateTask={canCreateTaskFromReport(user.role)} />
         )}
         {activeTab.key === 'admin' && <RoomAdminTab rooms={rooms} admin={admin} />}
       </div>

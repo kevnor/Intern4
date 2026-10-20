@@ -31,3 +31,12 @@ vi.mock('../server/dao/roomsDAO', () => ({
   getResidentsForRooms: vi.fn().mockResolvedValue([]),
   setHusfar: vi.fn().mockResolvedValue(undefined),
 }));
+
+// No room reports.
+vi.mock('../server/dao/roomReportsDAO', () => ({
+  getRoomReports: vi.fn().mockResolvedValue([]),
+  createRoomReport: vi.fn().mockResolvedValue(undefined),
+  setReportStatus: vi.fn().mockResolvedValue(undefined),
+  linkReportToTask: vi.fn().mockResolvedValue(undefined),
+  withdrawRoomReport: vi.fn().mockResolvedValue(undefined),
+}));

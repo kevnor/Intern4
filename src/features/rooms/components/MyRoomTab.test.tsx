@@ -3,6 +3,12 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MyRoomTab from './MyRoomTab';
 import { getUserRoomHistory } from '../../../server/dao/roomsDAO';
+import {
+  createRoomReport,
+  getRoomReports,
+  withdrawRoomReport,
+} from '../../../server/dao/roomReportsDAO';
+import userEvent from '@testing-library/user-event';
 import type { Room } from '../types';
 
 const movedIn = new Date(2025, 7, 1);
@@ -76,5 +82,59 @@ describe('MyRoomTab', () => {
 
     expect(await screen.findByRole('link', { name: 'Rom 101' })).toBeInTheDocument();
     expect(screen.getByText('1.8.2024 – 1.6.2025')).toBeInTheDocument();
+  });
+
+  it('shows reports for my room and lets me withdraw my own open report', async () => {
+    const user = userEvent.setup();
+    const report = (id: string, reportedBy: string, status: 'open' | 'resolved') => ({
+      id,
+      roomId: 'r1',
+      roomNumber: 150,
+      reportedBy,
+      reporterName: reportedBy === 'me' ? 'Meg' : 'Kari Nordmann',
+      title: `Melding ${id}`,
+      description: null,
+      status,
+      workItemId: null,
+      createdAt: new Date(2026, 9, 1),
+      resolvedAt: null,
+    });
+    vi.mocked(getRoomReports).mockResolvedValueOnce([
+      report('a', 'me', 'open'),
+      report('b', 'kari', 'open'),
+      report('c', 'me', 'resolved'),
+    ]);
+    renderTab('me');
+
+    expect(await screen.findByText('Melding a')).toBeInTheDocument();
+    // Only my own open report can be withdrawn.
+    const buttons = screen.getAllByRole('button', { name: 'Trekk tilbake' });
+    expect(buttons).toHaveLength(1);
+
+    await user.click(buttons[0]);
+
+    expect(withdrawRoomReport).toHaveBeenCalledWith('a');
+  });
+
+  it('lets me report a problem in my room', async () => {
+    const user = userEvent.setup();
+    renderTab('me');
+
+    await user.click(screen.getByRole('button', { name: 'Meld problem' }));
+    await user.type(screen.getByLabelText(/Hva er problemet/), 'Ødelagt lås');
+    await user.click(screen.getByRole('button', { name: 'Send melding' }));
+
+    expect(createRoomReport).toHaveBeenCalledWith({
+      roomId: 'r1',
+      reportedBy: 'me',
+      title: 'Ødelagt lås',
+      description: '',
+    });
+  });
+
+  it('does not offer reporting to someone without a room', () => {
+    renderTab('nobody');
+
+    expect(screen.queryByRole('button', { name: 'Meld problem' })).not.toBeInTheDocument();
   });
 });

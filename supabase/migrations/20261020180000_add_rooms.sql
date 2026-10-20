@@ -247,6 +247,11 @@ grant execute on function public.assign_resident_to_room(uuid, uuid, date) to au
 alter table public.rooms enable row level security;
 alter table public.room_occupancies enable row level security;
 
+-- New tables get every privilege by default; start from none so the column-level grant below
+-- is what actually limits updates.
+revoke all on table public.rooms from anon, authenticated;
+revoke all on table public.room_occupancies from anon, authenticated;
+
 grant select on table public.rooms to authenticated;
 grant select on table public.room_occupancies to authenticated;
 -- Only the type can be changed; the list of rooms is fixed.
