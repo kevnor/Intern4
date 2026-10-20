@@ -19,3 +19,11 @@ global.ResizeObserver = TestResizeObserver;
 vi.mock('../server/dao/vaktHoursDAO', () => ({
   getCompletedShiftCounts: vi.fn().mockResolvedValue({}),
 }));
+
+// No rooms or room history: components show their empty states.
+vi.mock('../server/dao/roomsDAO', () => ({
+  getRooms: vi.fn().mockResolvedValue([]),
+  getRoomHistory: vi.fn().mockResolvedValue([]),
+  getUserRoomHistory: vi.fn().mockResolvedValue([]),
+  assignResidentToRoom: vi.fn().mockResolvedValue(undefined),
+}));

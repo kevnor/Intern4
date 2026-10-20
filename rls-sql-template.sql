@@ -32,7 +32,9 @@ BEGIN
         'semester_settings',
         'vakt_shifts',
         'vakt_unavailability',
-        'vakt_swap_log'
+        'vakt_swap_log',
+        'rooms',
+        'room_occupancies'
       )
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I', _pol, _tbl);
@@ -562,3 +564,31 @@ CREATE POLICY "Residents can read their own swaps"
     OR to_user_id = auth.uid()
     OR public.is_vakt_manager()
   );
+
+-- ============================================================
+-- ROOMS AND ROOM OCCUPANCIES TABLES
+-- ============================================================
+-- The list of rooms is fixed; Admin, Romsjef and Data (public.is_room_manager(),
+-- created by migration 20261020180000_add_rooms) can change a room's type.
+-- Occupancies are the history of who lived where. They are readable by all
+-- and written only by assign_resident_to_room() and the triggers on users.
+-- ============================================================
+
+ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE room_occupancies ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can read rooms"
+  ON rooms FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Room managers can update rooms"
+  ON rooms FOR UPDATE
+  TO authenticated
+  USING (public.is_room_manager())
+  WITH CHECK (public.is_room_manager());
+
+CREATE POLICY "Authenticated users can read room occupancies"
+  ON room_occupancies FOR SELECT
+  TO authenticated
+  USING (true);

@@ -32,6 +32,8 @@ import { REGI_PATHS } from '../../regi/paths';
 import { summarizeSemesterRegi } from '../../regi/regiSummary';
 import { useSemesterHours } from '../../regi/hooks/useSemesterHours';
 import { useVaktHours } from '../../shifts/hooks/useVaktHours';
+import { useUserRoomHistory } from '../../rooms/hooks/useOccupancyHistory';
+import RoomHistoryList from '../../rooms/components/RoomHistoryList';
 import { hasVakt } from '../../shifts/vaktSummary';
 
 const ageFrom = (birthDate?: Date) => {
@@ -85,6 +87,7 @@ const ResidentProfilePage: React.FC = () => {
 
   const isSelf = user?.id === id;
   const { totalHours } = useSemesterHours();
+  const roomHistory = useUserRoomHistory(id || undefined);
   const { summary: vakt } = useVaktHours(id || undefined, profile?.role, totalHours);
   const summary = useMemo(
     () => (profile ? summarizeSemesterRegi(logs, profile.role, new Date(), totalHours) : null),
@@ -246,6 +249,20 @@ const ResidentProfilePage: React.FC = () => {
         />
       </Card>
 
+      <Card title="Romhistorikk" description="Rommene beboeren har bodd i.">
+        {roomHistory.loading ? (
+          <Skeleton className="h-16" />
+        ) : roomHistory.error ? (
+          <p className="text-sm text-danger">{roomHistory.error}</p>
+        ) : (
+          <RoomHistoryList
+            stays={roomHistory.stays}
+            subject="room"
+            emptyText="Ingen rom registrert."
+          />
+        )}
+      </Card>
+
       {showAdmin && (
         <Card
           title="Administrasjon"
@@ -396,6 +413,7 @@ const ResidentProfilePage: React.FC = () => {
           roles={lookups.roles}
           schools={lookups.schools}
           studies={lookups.studies}
+          rooms={lookups.rooms}
         />
       )}
 
