@@ -14,3 +14,12 @@ export type Shift = ShiftSlot & {
   userName: string | null;
   status: ShiftStatus;
 };
+
+export type Unavailability = {
+  id: string;
+  userId: string;
+  // Calendar days, inclusive.
+  from: Date;
+  to: Date;
+  note: string | null;
+};

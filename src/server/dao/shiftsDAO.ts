@@ -54,3 +54,53 @@ export async function createShiftSlots(slots: ShiftSlot[]): Promise<void> {
   );
   if (error) throw new Error(`Could not create shifts: ${error.message}`);
 }
+
+type ShiftWriteFields = Pick<Shift, 'id' | 'startsAt' | 'endsAt' | 'slotType'>;
+
+// Sets who has each shift in one request. The full row is sent because an upsert has to pass the
+// NOT NULL checks even though every row already exists.
+export async function assignShiftUsers(
+  assignments: (ShiftWriteFields & { userId: string | null })[]
+): Promise<void> {
+  if (assignments.length === 0) return;
+  const { error } = await supabase.from('vakt_shifts').upsert(
+    assignments.map((assignment) => ({
+      id: assignment.id,
+      starts_at: assignment.startsAt.toISOString(),
+      ends_at: assignment.endsAt.toISOString(),
+      slot_type: assignment.slotType,
+      user_id: assignment.userId,
+    })),
+    { onConflict: 'id' }
+  );
+  if (error) throw new Error(`Could not assign shifts: ${error.message}`);
+}
+
+export async function setShiftUser(shiftId: string, userId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('vakt_shifts')
+    .update({ user_id: userId })
+    .eq('id', shiftId);
+  if (error) throw new Error(`Could not update shift: ${error.message}`);
+}
+
+// Removes everyone from the unpublished shifts in the period; published shifts are left alone.
+export async function clearDraftAssignments(from: Date, to: Date): Promise<void> {
+  const { error } = await supabase
+    .from('vakt_shifts')
+    .update({ user_id: null })
+    .eq('status', 'draft')
+    .gte('starts_at', from.toISOString())
+    .lt('starts_at', to.toISOString());
+  if (error) throw new Error(`Could not clear assignments: ${error.message}`);
+}
+
+export async function publishShifts(from: Date, to: Date): Promise<void> {
+  const { error } = await supabase
+    .from('vakt_shifts')
+    .update({ status: 'published' })
+    .eq('status', 'draft')
+    .gte('starts_at', from.toISOString())
+    .lt('starts_at', to.toISOString());
+  if (error) throw new Error(`Could not publish shifts: ${error.message}`);
+}

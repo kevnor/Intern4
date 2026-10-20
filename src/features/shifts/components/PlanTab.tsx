@@ -21,6 +21,8 @@ type PlanTabProps = {
   loading: boolean;
   userId: string;
   canManage: boolean;
+  // Called when a manager picks a shift to change.
+  onSelectShift?: (shift: Shift) => void;
   onCreateSlots: () => Promise<void>;
   now?: Date;
 };
@@ -31,6 +33,7 @@ const PlanTab = ({
   loading,
   userId,
   canManage,
+  onSelectShift,
   onCreateSlots,
   now = new Date(),
 }: PlanTabProps) => {
@@ -119,7 +122,12 @@ const PlanTab = ({
                     <p className="text-sm text-subtle">Ingen vakter</p>
                   )
                 : dayShifts.map((shift) => (
-                    <ShiftChip key={shift.id} shift={shift} mine={shift.userId === userId} />
+                    <ShiftChip
+                      key={shift.id}
+                      shift={shift}
+                      mine={shift.userId === userId}
+                      onSelect={canManage ? onSelectShift : undefined}
+                    />
                   ))}
             </Card>
           );

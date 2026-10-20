@@ -30,7 +30,8 @@ BEGIN
         'work_assignments',
         'work_misc',
         'semester_settings',
-        'vakt_shifts'
+        'vakt_shifts',
+        'vakt_unavailability'
       )
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I', _pol, _tbl);
@@ -517,3 +518,27 @@ CREATE POLICY "Vakt managers can delete shifts"
   ON vakt_shifts FOR DELETE
   TO authenticated
   USING (public.is_vakt_manager());
+
+-- ============================================================
+-- VAKT UNAVAILABILITY TABLE
+-- ============================================================
+-- Residents add and remove their own unavailable days. Admin and
+-- Vaktsjef can read everyone's (the schedule generator needs them).
+-- ============================================================
+
+ALTER TABLE vakt_unavailability ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Residents can read own unavailability"
+  ON vakt_unavailability FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid() OR public.is_vakt_manager());
+
+CREATE POLICY "Residents can add own unavailability"
+  ON vakt_unavailability FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Residents can delete own unavailability"
+  ON vakt_unavailability FOR DELETE
+  TO authenticated
+  USING (user_id = auth.uid() OR public.is_vakt_manager());
