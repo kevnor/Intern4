@@ -12,6 +12,9 @@ const shift: Shift = {
   userId: 'a',
   userName: 'Anne',
   status: 'draft',
+  swapRequested: false,
+  swapOfferAmount: null,
+  swapNote: null,
 };
 
 const users = [

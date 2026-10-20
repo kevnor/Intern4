@@ -5,7 +5,8 @@ import { SLOT_LABELS, SLOT_NAMES, SHIFT_HOURS } from '../slots';
 import { formatDayMonth, formatWeekday, isSameDay, addDays } from '../calendar';
 import type { Shift } from '../types';
 import { getRequiredHoursForRole } from '../../../app/constants/regiRequirements';
-import { Badge, Card, EmptyState, Skeleton, StatTile } from '../../../shared/components';
+import { canRequestSwap } from '../swaps';
+import { Badge, Button, Card, EmptyState, Skeleton, StatTile } from '../../../shared/components';
 import { formatHours } from '../../../shared/utils/date';
 
 type MyShiftsTabProps = {
@@ -14,6 +15,8 @@ type MyShiftsTabProps = {
   userId: string;
   role?: string;
   totalHours: number;
+  // Opens the swap dialog for one of my shifts.
+  onSwap?: (shift: Shift) => void;
   now?: Date;
 };
 
@@ -29,6 +32,7 @@ const MyShiftsTab = ({
   userId,
   role,
   totalHours,
+  onSwap,
   now = new Date(),
 }: MyShiftsTabProps) => {
   const mine = useMemo(() => shifts.filter((shift) => shift.userId === userId), [shifts, userId]);
@@ -94,7 +98,18 @@ const MyShiftsTab = ({
                     </p>
                     <p className="text-sm text-muted">{formatHours(SHIFT_HOURS)}</p>
                   </div>
+                  {shift.swapRequested && <Badge tone="warning">Bytte søkes</Badge>}
                   {dayBadge(shift, now)}
+                  {onSwap && canRequestSwap(shift, userId, now) && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onSwap(shift)}
+                      aria-label={`${shift.swapRequested ? 'Endre bytte for' : 'Bytt'} vakt ${formatWeekday(shift.startsAt)} ${formatDayMonth(shift.startsAt)}`}
+                    >
+                      {shift.swapRequested ? 'Endre' : 'Bytt'}
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>

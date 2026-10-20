@@ -32,6 +32,9 @@ const shift = (id: string, day: number, hour: number, overrides: Partial<Shift> 
   userId: null,
   userName: null,
   status: 'draft',
+  swapRequested: false,
+  swapOfferAmount: null,
+  swapNote: null,
   ...overrides,
 });
 

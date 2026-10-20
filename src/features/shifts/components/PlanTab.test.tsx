@@ -14,6 +14,9 @@ const shift = (overrides: Partial<Shift>): Shift => ({
   userId: null,
   userName: null,
   status: 'published',
+  swapRequested: false,
+  swapOfferAmount: null,
+  swapNote: null,
   ...overrides,
 });
 
@@ -81,5 +84,41 @@ describe('PlanTab', () => {
     renderPlan([shift({ status: 'draft' })], true);
 
     expect(screen.getByText('Utkast – ikke synlig for beboere')).toBeInTheDocument();
+  });
+
+  it('marks shifts that are up for swap', () => {
+    renderPlan([shift({ userId: 'x', userName: 'Kari', swapRequested: true })]);
+
+    expect(screen.getByText(/Bytte søkes/)).toBeInTheDocument();
+  });
+
+  it('only makes shifts the user can act on clickable', async () => {
+    const user = userEvent.setup();
+    const onSelectShift = vi.fn();
+    const own = shift({ id: 'own', userId: 'me', userName: 'Meg' });
+    const other = shift({
+      id: 'other',
+      startsAt: new Date(2026, 9, 21, 16),
+      userId: 'x',
+      userName: 'Kari',
+    });
+    render(
+      <PlanTab
+        shifts={[own, other]}
+        loading={false}
+        userId="me"
+        canManage={false}
+        onSelectShift={onSelectShift}
+        canSelect={(candidate) => candidate.id === 'own'}
+        onCreateSlots={vi.fn()}
+        now={NOW}
+      />
+    );
+
+    expect(screen.getAllByRole('button', { name: /16–24/ })).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: /16–24/ }));
+
+    expect(onSelectShift).toHaveBeenCalledWith(own);
   });
 });

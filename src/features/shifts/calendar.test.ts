@@ -38,6 +38,9 @@ describe('groupShiftsByDay', () => {
       userId: null,
       userName: null,
       status: 'published',
+      swapRequested: false,
+      swapOfferAmount: null,
+      swapNote: null,
     });
 
     const groups = groupShiftsByDay([shift(0, 19), shift(16, 19), shift(0, 20)]);

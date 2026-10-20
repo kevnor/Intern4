@@ -21,8 +21,10 @@ type PlanTabProps = {
   loading: boolean;
   userId: string;
   canManage: boolean;
-  // Called when a manager picks a shift to change.
+  // Called when a shift the user can act on is picked: managers change any shift, residents can
+  // ask for a swap on their own or take one that is up for swap.
   onSelectShift?: (shift: Shift) => void;
+  canSelect?: (shift: Shift) => boolean;
   onCreateSlots: () => Promise<void>;
   now?: Date;
 };
@@ -34,6 +36,7 @@ const PlanTab = ({
   userId,
   canManage,
   onSelectShift,
+  canSelect = () => canManage,
   onCreateSlots,
   now = new Date(),
 }: PlanTabProps) => {
@@ -126,7 +129,7 @@ const PlanTab = ({
                       key={shift.id}
                       shift={shift}
                       mine={shift.userId === userId}
-                      onSelect={canManage ? onSelectShift : undefined}
+                      onSelect={onSelectShift && canSelect(shift) ? onSelectShift : undefined}
                     />
                   ))}
             </Card>

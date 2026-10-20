@@ -31,7 +31,8 @@ BEGIN
         'work_misc',
         'semester_settings',
         'vakt_shifts',
-        'vakt_unavailability'
+        'vakt_unavailability',
+        'vakt_swap_log'
       )
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I', _pol, _tbl);
@@ -542,3 +543,22 @@ CREATE POLICY "Residents can delete own unavailability"
   ON vakt_unavailability FOR DELETE
   TO authenticated
   USING (user_id = auth.uid() OR public.is_vakt_manager());
+
+-- ============================================================
+-- VAKT SWAP LOG TABLE
+-- ============================================================
+-- Shifts that changed hands. Written only by the claim_vakt_shift
+-- function (migration 20261020170000_add_vakt_swaps); residents
+-- read their own swaps, Admin and Vaktsjef read all.
+-- ============================================================
+
+ALTER TABLE vakt_swap_log ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Residents can read their own swaps"
+  ON vakt_swap_log FOR SELECT
+  TO authenticated
+  USING (
+    from_user_id = auth.uid()
+    OR to_user_id = auth.uid()
+    OR public.is_vakt_manager()
+  );

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
 import MyShiftsTab from './MyShiftsTab';
 import type { Shift } from '../types';
 
@@ -14,6 +16,9 @@ const shift = (day: number, hour: number, userId: string | null): Shift => ({
   userId,
   userName: userId,
   status: 'published',
+  swapRequested: false,
+  swapOfferAmount: null,
+  swapNote: null,
 });
 
 const renderTab = (shifts: Shift[], role = 'Full Vakt') =>
@@ -55,5 +60,43 @@ describe('MyShiftsTab', () => {
     renderTab([], 'Full Regi');
 
     expect(screen.getByText('Du har ikke vaktkrav dette semesteret.')).toBeInTheDocument();
+  });
+
+  it('lets me ask for a swap on an upcoming shift', async () => {
+    const user = userEvent.setup();
+    const onSwap = vi.fn();
+    const upcoming = shift(21, 16, ME);
+    render(
+      <MyShiftsTab
+        shifts={[upcoming]}
+        loading={false}
+        userId={ME}
+        role="Full Vakt"
+        totalHours={48}
+        onSwap={onSwap}
+        now={NOW}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Bytt vakt/ }));
+
+    expect(onSwap).toHaveBeenCalledWith(upcoming);
+  });
+
+  it('marks a shift that is up for swap', () => {
+    render(
+      <MyShiftsTab
+        shifts={[{ ...shift(21, 16, ME), swapRequested: true }]}
+        loading={false}
+        userId={ME}
+        role="Full Vakt"
+        totalHours={48}
+        onSwap={vi.fn()}
+        now={NOW}
+      />
+    );
+
+    expect(screen.getByText('Bytte søkes')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Endre bytte for vakt/ })).toBeInTheDocument();
   });
 });
