@@ -29,7 +29,8 @@ BEGIN
         'work_tasks',
         'work_assignments',
         'work_misc',
-        'semester_settings'
+        'semester_settings',
+        'vakt_shifts'
       )
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I', _pol, _tbl);
@@ -485,3 +486,34 @@ CREATE POLICY "Admins can update semester settings"
         AND r.name = 'Admin'
     )
   );
+
+-- ============================================================
+-- VAKT SHIFTS TABLE
+-- ============================================================
+-- Reception shifts. Residents read published shifts only; Admin
+-- and Vaktsjef (public.is_vakt_manager(), created by migration
+-- 20261020150000_add_vakt_shifts) read and write everything.
+-- ============================================================
+
+ALTER TABLE vakt_shifts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Residents can read published shifts"
+  ON vakt_shifts FOR SELECT
+  TO authenticated
+  USING (status = 'published' OR public.is_vakt_manager());
+
+CREATE POLICY "Vakt managers can insert shifts"
+  ON vakt_shifts FOR INSERT
+  TO authenticated
+  WITH CHECK (public.is_vakt_manager());
+
+CREATE POLICY "Vakt managers can update shifts"
+  ON vakt_shifts FOR UPDATE
+  TO authenticated
+  USING (public.is_vakt_manager())
+  WITH CHECK (public.is_vakt_manager());
+
+CREATE POLICY "Vakt managers can delete shifts"
+  ON vakt_shifts FOR DELETE
+  TO authenticated
+  USING (public.is_vakt_manager());
