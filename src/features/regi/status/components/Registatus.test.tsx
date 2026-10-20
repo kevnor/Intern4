@@ -33,6 +33,14 @@ vi.mock('../../../../server/dao/userDAO', () => ({
       onLeave: true,
     },
     {
+      id: 'e',
+      name: 'Eva Bareregi',
+      email: 'e@x.no',
+      role: 'Halv/Halv',
+      isActive: true,
+      onLeave: false,
+    },
+    {
       id: 'd',
       name: 'Dag Admin',
       email: 'd@x.no',
@@ -43,7 +51,11 @@ vi.mock('../../../../server/dao/userDAO', () => ({
   ]),
 }));
 vi.mock('../../../../server/dao/regiDAO', () => ({
-  getApprovedRegiHoursByUserSince: vi.fn().mockResolvedValue({ a: 4, b: 24 }),
+  getApprovedRegiHoursByUserSince: vi.fn().mockResolvedValue({ a: 4, b: 24, e: 30 }),
+}));
+// Anne has done one shift, Bo three, Eva none.
+vi.mock('../../../../server/dao/vaktHoursDAO', () => ({
+  getCompletedShiftCounts: vi.fn().mockResolvedValue({ a: 1, b: 3 }),
 }));
 
 describe('Registatus', () => {
@@ -53,16 +65,19 @@ describe('Registatus', () => {
 
     const table = await screen.findByRole('table');
     expect(
-      within(table).getByRole('meter', { name: 'Anne Mangler: 4 t av 24 t' })
+      within(table).getByRole('meter', { name: 'Anne Mangler: 12 t av 48 t' })
     ).toBeInTheDocument();
-    expect(within(table).getByText('Mangler timer')).toBeInTheDocument();
+    expect(within(table).getByText('Regi 4 t · Vakt 8 t')).toBeInTheDocument();
+    expect(within(table).getAllByText('Mangler timer')).toHaveLength(2);
     expect(within(table).getByText('Oppfylt')).toBeInTheDocument();
     expect(within(table).getByText('Permisjon')).toBeInTheDocument();
     expect(within(table).getByText('Ingen krav')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('radio', { name: 'Mangler (1)' }));
+    await user.click(screen.getByRole('radio', { name: 'Mangler (2)' }));
 
     expect(within(table).getByText('Anne Mangler')).toBeInTheDocument();
+    // Eva's extra regi doesn't make up for the vakt she hasn't done.
+    expect(within(table).getByText('Eva Bareregi')).toBeInTheDocument();
     expect(within(table).queryByText('Bo Ferdig')).not.toBeInTheDocument();
     expect(within(table).queryByText('Cia Borte')).not.toBeInTheDocument();
   });

@@ -13,6 +13,9 @@ import { useAuth } from '../providers/AuthContext';
 import { useHomeData } from './useHomeData';
 import { getRegiTodo, summarizeSemesterRegi } from '../../features/regi/regiSummary';
 import { useSemesterHours } from '../../features/regi/hooks/useSemesterHours';
+import { useVaktHours } from '../../features/shifts/hooks/useVaktHours';
+import { VaktProgress } from '../../features/shifts/components/VaktProgress';
+import { hasVakt } from '../../features/shifts/vaktSummary';
 import { canApproveWork } from '../../features/regi/permissions';
 import { REGI_PATHS } from '../../features/regi/paths';
 import { PageLayout } from '../../shared/layouts';
@@ -55,6 +58,7 @@ const HomePage = () => {
 
   const userId = user?.id ?? '';
   const { totalHours } = useSemesterHours();
+  const { summary: vakt, loading: vaktLoading } = useVaktHours(user?.id, user?.role, totalHours);
   const summary = useMemo(
     () => summarizeSemesterRegi(logs, user?.role, new Date(), totalHours),
     [logs, user?.role, totalHours]
@@ -131,6 +135,12 @@ const HomePage = () => {
             </div>
           )}
         </Card>
+
+        {hasVakt(vakt) && (
+          <Card title="Vakt" description="Fullførte vakter dette semesteret.">
+            {vaktLoading ? <Skeleton className="h-24" /> : <VaktProgress summary={vakt} showLink />}
+          </Card>
+        )}
 
         <Card title="Å gjøre" bodyClassName="p-0 sm:p-0">
           {loading ? (

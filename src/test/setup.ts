@@ -14,3 +14,8 @@ class TestResizeObserver {
 }
 
 global.ResizeObserver = TestResizeObserver;
+
+// No finished vakt: components show zero vakt hours.
+vi.mock('../server/dao/vaktHoursDAO', () => ({
+  getCompletedShiftCounts: vi.fn().mockResolvedValue({}),
+}));

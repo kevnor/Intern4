@@ -5,6 +5,9 @@ import { useRegiHub } from './RegiHubContext';
 import { getRegiTodo, getSuggestedTasks, summarizeSemesterRegi } from '../regiSummary';
 import { REGI_PATHS } from '../paths';
 import { useSemesterHours } from '../hooks/useSemesterHours';
+import { useVaktHours } from '../../shifts/hooks/useVaktHours';
+import { VaktProgress } from '../../shifts/components/VaktProgress';
+import { hasVakt } from '../../shifts/vaktSummary';
 import { TaskCard } from '../../tasks/components/TaskCard';
 import {
   Button,
@@ -32,6 +35,7 @@ const OverviewTab = () => {
     useRegiHub();
 
   const { totalHours } = useSemesterHours();
+  const { summary: vakt } = useVaktHours(user.id, user.role, totalHours);
   const summary = useMemo(
     () => summarizeSemesterRegi(logs.logs, user.role, new Date(), totalHours),
     [logs.logs, user.role, totalHours]
@@ -119,6 +123,12 @@ const OverviewTab = () => {
           </div>
         )}
       </Card>
+
+      {hasVakt(vakt) && (
+        <Card title="Vakt" description="Fullførte vakter dette semesteret.">
+          <VaktProgress summary={vakt} showLink />
+        </Card>
+      )}
 
       {(todo.count > 0 || (isManager && pendingApprovals > 0)) && (
         <section className="space-y-3">

@@ -31,6 +31,8 @@ import { canApproveWork } from '../../regi/permissions';
 import { REGI_PATHS } from '../../regi/paths';
 import { summarizeSemesterRegi } from '../../regi/regiSummary';
 import { useSemesterHours } from '../../regi/hooks/useSemesterHours';
+import { useVaktHours } from '../../shifts/hooks/useVaktHours';
+import { hasVakt } from '../../shifts/vaktSummary';
 
 const ageFrom = (birthDate?: Date) => {
   if (!birthDate) return null;
@@ -83,6 +85,7 @@ const ResidentProfilePage: React.FC = () => {
 
   const isSelf = user?.id === id;
   const { totalHours } = useSemesterHours();
+  const { summary: vakt } = useVaktHours(id || undefined, profile?.role, totalHours);
   const summary = useMemo(
     () => (profile ? summarizeSemesterRegi(logs, profile.role, new Date(), totalHours) : null),
     [logs, profile, totalHours]
@@ -329,6 +332,39 @@ const ResidentProfilePage: React.FC = () => {
                         width: `${Math.round(Math.min(summary.approved / summary.required, 1) * 100)}%`,
                       }}
                     />
+                  </div>
+                )}
+                {hasVakt(vakt) && (
+                  <div className="space-y-2 pt-2">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className="text-sm font-medium">Vakt dette semesteret</p>
+                      <p className="text-sm tabular-nums">
+                        {formatHours(vakt.done)}
+                        {vakt.required > 0 && (
+                          <span className="text-subtle"> / {formatHours(vakt.required)}</span>
+                        )}
+                      </p>
+                    </div>
+                    {vakt.required > 0 && (
+                      <div
+                        role="meter"
+                        aria-label="Vakttimer av kravet"
+                        aria-valuemin={0}
+                        aria-valuemax={vakt.required}
+                        aria-valuenow={Math.min(vakt.done, vakt.required)}
+                        className="h-2 overflow-hidden rounded-full bg-surface-muted"
+                      >
+                        <div
+                          className={cn(
+                            'h-full rounded-full',
+                            vakt.remaining === 0 ? 'bg-success' : 'bg-primary'
+                          )}
+                          style={{
+                            width: `${Math.round(Math.min(vakt.done / vakt.required, 1) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
                 {isRegiManager && (

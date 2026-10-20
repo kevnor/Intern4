@@ -6,6 +6,7 @@ import type { RegiLogWithId } from '../../shared/types/regi';
 import type { Task } from '../../shared/types/regi/tasks';
 import { getPendingRegiApprovals, getRegiLogsByUser } from '../../server/dao/regiDAO';
 import { getTasks } from '../../server/dao/tasksDAO';
+import { getCompletedShiftCounts } from '../../server/dao/vaktHoursDAO';
 
 const ME = '11111111-1111-4111-8111-111111111111';
 const mockUseAuth = vi.fn();
@@ -101,5 +102,30 @@ describe('HomePage', () => {
       'href',
       '/regi/godkjenning'
     );
+  });
+
+  it('shows finished vakt hours to residents with a vakt requirement', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: ME, name: 'Vera Vakt', role: 'Full Vakt' } });
+    vi.mocked(getCompletedShiftCounts).mockResolvedValueOnce({ [ME]: 2 });
+    renderHome();
+
+    expect(await screen.findByText('16 t')).toBeInTheDocument();
+    expect(screen.getByRole('meter', { name: 'Vakttimer av kravet' })).toHaveAttribute(
+      'aria-valuemax',
+      '48'
+    );
+    expect(screen.getByText('32 t igjen')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Se vaktene dine' })).toHaveAttribute(
+      'href',
+      '/vakt/mine'
+    );
+  });
+
+  it('hides the vakt card from residents with no vakt', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: ME, name: 'Rune Regi', role: 'Full Regi' } });
+    renderHome();
+
+    await screen.findByText('44 t igjen');
+    expect(screen.queryByRole('meter', { name: 'Vakttimer av kravet' })).not.toBeInTheDocument();
   });
 });

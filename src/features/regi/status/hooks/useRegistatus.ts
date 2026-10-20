@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DEFAULT_SEMESTER_HOURS,
-  getRequiredRegiHoursForRole,
+  getRequiredHoursForRole,
 } from '../../../../app/constants/regiRequirements';
 import { canApproveWork } from '../../permissions';
 import { getApprovedRegiHoursByUserSince } from '../../../../server/dao/regiDAO';
 import { getActiveUsersWithRole } from '../../../../server/dao/userDAO';
 import { AuthUser } from '../../../auth/hooks/useAuth';
 import { getRequiredHours } from '../../../../server/dao/semesterSettingsDAO';
+import { getCompletedShiftCounts } from '../../../../server/dao/vaktHoursDAO';
+import { SHIFT_HOURS } from '../../../shifts/slots';
 import { getSemester, getSemesterStart } from '../../../../shared/utils/semester';
 
 export type RegistatusRow = {
@@ -15,9 +17,13 @@ export type RegistatusRow = {
   name: string;
   email: string;
   role?: string;
+  // Regi and vakt added together; the breakdown below is shown when the resident has vakt.
   requiredHours: number;
   approvedHours: number;
   remainingHours: number;
+  regiHours: number;
+  vaktHours: number;
+  requiresVakt: boolean;
   onLeave: boolean;
 };
 
@@ -32,26 +38,34 @@ export const useRegistatus = (user: AuthUser, authLoading: boolean) => {
       setLoading(true);
       setError(null);
 
-      const [activeUsers, hoursMap, configuredHours] = await Promise.all([
+      const [activeUsers, hoursMap, configuredHours, vaktCounts] = await Promise.all([
         getActiveUsersWithRole(),
         getApprovedRegiHoursByUserSince(getSemesterStart()),
         getRequiredHours(getSemester().key).catch(() => undefined),
+        // Without shifts everyone simply shows no vakt done.
+        getCompletedShiftCounts(getSemesterStart()).catch(() => ({}) as Record<string, number>),
       ]);
       const totalHours = configuredHours ?? DEFAULT_SEMESTER_HOURS;
 
       const nextRows = activeUsers.map((activeUser) => {
-        const requiredHours = getRequiredRegiHoursForRole(activeUser.role, totalHours);
-        const approvedHours = hoursMap[activeUser.id] ?? 0;
-        const remainingHours = Math.max(requiredHours - approvedHours, 0);
+        const required = getRequiredHoursForRole(activeUser.role, totalHours);
+        const regiHours = hoursMap[activeUser.id] ?? 0;
+        const vaktHours = (vaktCounts[activeUser.id] ?? 0) * SHIFT_HOURS;
+        // Extra regi doesn't make up for missing vakt, or the other way around.
+        const remainingHours =
+          Math.max(required.regi - regiHours, 0) + Math.max(required.vakt - vaktHours, 0);
 
         return {
           id: activeUser.id,
           name: activeUser.name,
           email: activeUser.email,
           role: activeUser.role ?? 'Halv/Halv',
-          requiredHours,
-          approvedHours,
+          requiredHours: required.regi + required.vakt,
+          approvedHours: regiHours + vaktHours,
           remainingHours,
+          regiHours,
+          vaktHours,
+          requiresVakt: required.vakt > 0 || vaktHours > 0,
           onLeave: activeUser.onLeave,
         };
       });

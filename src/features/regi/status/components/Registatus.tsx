@@ -42,7 +42,8 @@ const ProgressMeter = ({ row }: { row: RegistatusRow }) => {
   if (row.requiredHours === 0) {
     return <span className="text-sm text-subtle">{formatHours(row.approvedHours)} godkjent</span>;
   }
-  const ratio = row.requiredHours > 0 ? Math.min(row.approvedHours / row.requiredHours, 1) : 1;
+  // Based on what is still missing, so extra regi doesn't hide missing vakt.
+  const ratio = (row.requiredHours - row.remainingHours) / row.requiredHours;
   return (
     <div className="flex items-center gap-2">
       <div
@@ -50,7 +51,7 @@ const ProgressMeter = ({ row }: { row: RegistatusRow }) => {
         aria-label={`${row.name}: ${formatHours(row.approvedHours)} av ${formatHours(row.requiredHours)}`}
         aria-valuemin={0}
         aria-valuemax={row.requiredHours}
-        aria-valuenow={Math.min(row.approvedHours, row.requiredHours)}
+        aria-valuenow={row.requiredHours - row.remainingHours}
         className="h-2 w-24 overflow-hidden rounded-full bg-surface-muted"
       >
         <div
@@ -62,6 +63,11 @@ const ProgressMeter = ({ row }: { row: RegistatusRow }) => {
         {formatHours(row.approvedHours)}
         <span className="text-subtle"> / {formatHours(row.requiredHours)}</span>
       </span>
+      {row.requiresVakt && (
+        <span className="whitespace-nowrap text-xs text-subtle">
+          Regi {formatHours(row.regiHours)} · Vakt {formatHours(row.vaktHours)}
+        </span>
+      )}
     </div>
   );
 };
