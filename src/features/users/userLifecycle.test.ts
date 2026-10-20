@@ -7,11 +7,10 @@ import {
 } from './userLifecycle';
 
 describe('userLifecycle', () => {
-  it('validates room numbers in one place', () => {
+  it('leaves room numbers to the room list', () => {
+    // Rooms are picked from the rooms table, so there is no range to validate here.
     expect(validateUserField('roomNumber', 260)).toEqual({});
-    expect(validateUserField('roomNumber', 99)).toEqual({
-      roomNumber: 'Romnummer må være 060, 0, mellom 100-173, eller mellom 200-273',
-    });
+    expect(validateUserField('roomNumber', 99)).toEqual({});
   });
 
   it('prepares the create-user payload with normalized phone and lookup defaults', () => {

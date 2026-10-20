@@ -1,4 +1,4 @@
-import type { Occupancy, Room, RoomType } from './types';
+import type { Occupancy, ResidentForRoom, Room, RoomType } from './types';
 
 export const ROOM_TYPES: RoomType[] = [
   'bottekott',
@@ -55,3 +55,31 @@ export const sortOccupancies = (stays: Occupancy[]): Occupancy[] =>
     if (!a.movedOut !== !b.movedOut) return a.movedOut ? 1 : -1;
     return b.movedIn.getTime() - a.movedIn.getTime();
   });
+
+// Rooms a resident can be put in: space left, and husfarhybelen only goes to the Husfar.
+export const getAssignableRooms = (rooms: Room[], forHusfar = false): Room[] =>
+  rooms.filter((room) => getFreeSpots(room) > 0 && (room.type !== 'husfarhybel' || forHusfar));
+
+export const getResidentsWithoutRoom = (residents: ResidentForRoom[]): ResidentForRoom[] =>
+  residents.filter((resident) => resident.roomNumber === 0);
+
+export const getHusfar = (residents: ResidentForRoom[]): ResidentForRoom | undefined =>
+  residents.find((resident) => resident.isHusfar);
+
+export const getHusfarRoom = (rooms: Room[]): Room | undefined =>
+  rooms.find((room) => room.type === 'husfarhybel');
+
+// "Room 150 – Liten parhybel (1 av 2)" as shown in the room pickers.
+export const describeRoomOption = (room: Room): string =>
+  `${room.number} · ${formatRoomType(room.type)} (${room.occupants.length} av ${room.capacity})`;
+
+export type RangeInput = { from: string; to: string };
+
+// Checks a "from–to" pair of room numbers typed into the type-by-range form.
+export const parseRoomRange = ({ from, to }: RangeInput): { from: number; to: number } | string => {
+  const start = Number.parseInt(from, 10);
+  const end = Number.parseInt(to === '' ? from : to, 10);
+  if (!Number.isInteger(start) || !Number.isInteger(end)) return 'Skriv inn romnummer.';
+  if (end < start) return 'Til-nummeret må være likt eller høyere enn fra-nummeret.';
+  return { from: start, to: end };
+};

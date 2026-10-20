@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  describeRoomOption,
   filterRooms,
   formatRoomType,
+  getAssignableRooms,
   getFreeSpots,
+  getHusfar,
+  getHusfarRoom,
   getRoomCapacity,
+  getResidentsWithoutRoom,
   getRoomOfUser,
   isRoomType,
+  parseRoomRange,
   sortOccupancies,
 } from './rooms';
 import type { Occupancy, Room } from './types';
@@ -118,5 +124,68 @@ describe('sortOccupancies', () => {
     ]);
 
     expect(sorted.map((s) => s.id)).toEqual(['current', 'middle', 'old']);
+  });
+});
+
+describe('getAssignableRooms', () => {
+  const rooms = [
+    room({ number: 60, type: 'husfarhybel' }),
+    room({ number: 101 }),
+    room({ number: 102, occupants: [occupant('a', 'Anne')] }),
+    room({ number: 150, type: 'liten_parhybel', capacity: 2, occupants: [occupant('b', 'Bo')] }),
+  ];
+
+  it('offers rooms with space and keeps husfarhybelen for the Husfar', () => {
+    expect(getAssignableRooms(rooms).map((r) => r.number)).toEqual([101, 150]);
+    expect(getAssignableRooms(rooms, true).map((r) => r.number)).toEqual([60, 101, 150]);
+  });
+});
+
+describe('resident helpers', () => {
+  const residents = [
+    { id: 'a', name: 'Anne', roomNumber: 101, isHusfar: false },
+    { id: 'b', name: 'Bo', roomNumber: 0, isHusfar: false },
+    { id: 'c', name: 'Cia', roomNumber: 60, isHusfar: true },
+  ];
+
+  it('finds residents without a room and the Husfar', () => {
+    expect(getResidentsWithoutRoom(residents).map((r) => r.id)).toEqual(['b']);
+    expect(getHusfar(residents)?.id).toBe('c');
+    expect(getHusfar(residents.slice(0, 2))).toBeUndefined();
+  });
+
+  it('finds husfarhybelen', () => {
+    expect(
+      getHusfarRoom([room({ number: 101 }), room({ number: 60, type: 'husfarhybel' })])?.number
+    ).toBe(60);
+    expect(getHusfarRoom([room({ number: 101 })])).toBeUndefined();
+  });
+});
+
+describe('describeRoomOption', () => {
+  it('shows the number, type and how full the room is', () => {
+    expect(
+      describeRoomOption(
+        room({
+          number: 150,
+          type: 'liten_parhybel',
+          capacity: 2,
+          occupants: [occupant('a', 'Anne')],
+        })
+      )
+    ).toBe('150 · Liten parhybel (1 av 2)');
+    expect(describeRoomOption(room({ number: 101 }))).toBe('101 · Ikke satt (0 av 1)');
+  });
+});
+
+describe('parseRoomRange', () => {
+  it('reads a range and treats an empty end as a single room', () => {
+    expect(parseRoomRange({ from: '100', to: '110' })).toEqual({ from: 100, to: 110 });
+    expect(parseRoomRange({ from: '150', to: '' })).toEqual({ from: 150, to: 150 });
+  });
+
+  it('explains what is wrong', () => {
+    expect(parseRoomRange({ from: '', to: '' })).toBe('Skriv inn romnummer.');
+    expect(parseRoomRange({ from: '110', to: '100' })).toMatch(/likt eller høyere/);
   });
 });

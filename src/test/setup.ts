@@ -26,4 +26,8 @@ vi.mock('../server/dao/roomsDAO', () => ({
   getRoomHistory: vi.fn().mockResolvedValue([]),
   getUserRoomHistory: vi.fn().mockResolvedValue([]),
   assignResidentToRoom: vi.fn().mockResolvedValue(undefined),
+  updateRoomType: vi.fn().mockResolvedValue(undefined),
+  setRoomTypes: vi.fn().mockResolvedValue(0),
+  getResidentsForRooms: vi.fn().mockResolvedValue([]),
+  setHusfar: vi.fn().mockResolvedValue(undefined),
 }));

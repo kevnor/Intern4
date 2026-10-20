@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { assignResidentToRoom, getRoomHistory, getRooms, getUserRoomHistory } from './roomsDAO';
+import {
+  assignResidentToRoom,
+  getResidentsForRooms,
+  getRoomHistory,
+  getRooms,
+  getUserRoomHistory,
+  setHusfar,
+  setRoomTypes,
+  updateRoomType,
+} from './roomsDAO';
 import { supabase } from '../supabaseClient';
 
 // The setup file replaces this module for component tests; here the real one is under test.
@@ -9,7 +18,7 @@ vi.mock('../supabaseClient', () => ({ supabase: { from: vi.fn(), rpc: vi.fn() } 
 // A chainable stand-in for the query builder that resolves to `result` when awaited.
 const builder = (result: { data?: unknown; error?: { message: string } | null }) => {
   const chain: Record<string, unknown> = {};
-  for (const method of ['select', 'order', 'is', 'eq']) {
+  for (const method of ['select', 'order', 'is', 'eq', 'update', 'gte', 'lte']) {
     chain[method] = vi.fn(() => chain);
   }
   chain.then = (resolve: (value: unknown) => unknown) =>
@@ -113,5 +122,56 @@ describe('roomsDAO', () => {
       error: { message: 'Rommet er fullt' },
     } as never);
     await expect(assignResidentToRoom('a', 'r2')).rejects.toThrow('Rommet er fullt');
+  });
+
+  it('sets the type of one room and notices when row-level security blocked it', async () => {
+    const chain = builder({ data: [{ id: 'r1' }] });
+    vi.mocked(supabase.from).mockReturnValue(chain as never);
+
+    await updateRoomType('r1', 'korrhybel');
+    expect(chain.update).toHaveBeenCalledWith({ type: 'korrhybel' });
+    expect(chain.eq).toHaveBeenCalledWith('id', 'r1');
+
+    vi.mocked(supabase.from).mockReturnValue(builder({ data: [] }) as never);
+    await expect(updateRoomType('r1', null)).rejects.toThrow('Du har ikke tilgang');
+  });
+
+  it('sets a type on a whole range and returns how many rooms changed', async () => {
+    const chain = builder({ data: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] });
+    vi.mocked(supabase.from).mockReturnValue(chain as never);
+
+    const count = await setRoomTypes(100, 102, 'bottekott');
+
+    expect(count).toBe(3);
+    expect(chain.gte).toHaveBeenCalledWith('number', 100);
+    expect(chain.lte).toHaveBeenCalledWith('number', 102);
+    expect(chain.update).toHaveBeenCalledWith({ type: 'bottekott' });
+  });
+
+  it('maps active residents with their room and Husfar flag', async () => {
+    vi.mocked(supabase.from).mockReturnValue(
+      builder({
+        data: [
+          { id: 'a', name: 'Anne', room_number: 101, is_husfar: false },
+          { id: 'b', name: null, room_number: null, is_husfar: null },
+        ],
+      }) as never
+    );
+
+    expect(await getResidentsForRooms()).toEqual([
+      { id: 'a', name: 'Anne', roomNumber: 101, isHusfar: false },
+      { id: 'b', name: 'Ukjent', roomNumber: 0, isHusfar: false },
+    ]);
+  });
+
+  it('sets the Husfar through the database function and surfaces its message', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({ error: null } as never);
+    await setHusfar('a', true);
+    expect(supabase.rpc).toHaveBeenCalledWith('set_husfar', { p_user_id: 'a', p_is_husfar: true });
+
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      error: { message: 'Husfarhybelen er opptatt av Bo. Flytt dem først' },
+    } as never);
+    await expect(setHusfar('b', true)).rejects.toThrow('Husfarhybelen er opptatt');
   });
 });

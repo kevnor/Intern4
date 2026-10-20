@@ -1,8 +1,12 @@
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import RoomHistoryList from '../components/RoomHistoryList';
+import RoomManageCard from '../components/RoomManageCard';
+import { useAuth } from '../../../app/providers/AuthContext';
 import { useRoomHistory } from '../hooks/useOccupancyHistory';
+import { useRoomAdmin } from '../hooks/useRoomAdmin';
 import { useRooms } from '../hooks/useRooms';
+import { canManageRooms } from '../permissions';
 import { formatRoomType, getFreeSpots } from '../rooms';
 import { ROOM_PATHS } from '../paths';
 import { residentProfilePath } from '../../residents/paths';
@@ -12,9 +16,16 @@ import { formatDate } from '../../../shared/utils/date';
 
 const RoomDetailPage = () => {
   const { number } = useParams();
-  const { rooms, loading, error } = useRooms();
+  const { user } = useAuth();
+  const { rooms, loading, error, reload } = useRooms();
   const room = rooms.find((candidate) => String(candidate.number) === number);
-  const history = useRoomHistory(room?.id);
+  const isManager = canManageRooms(user?.role);
+  const admin = useRoomAdmin({ enabled: isManager, rooms, reloadRooms: reload });
+  // Moving someone in or out changes the history, so it is reloaded along with who lives here.
+  const history = useRoomHistory(
+    room?.id,
+    room?.occupants.map((occupant) => occupant.userId).join(',')
+  );
 
   const back = (
     <Link
@@ -97,6 +108,8 @@ const RoomDetailPage = () => {
           )}
         </Card>
       </div>
+
+      {isManager && <RoomManageCard room={room} admin={admin} />}
     </PageLayout>
   );
 };

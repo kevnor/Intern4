@@ -30,3 +30,12 @@ export type Occupancy = {
   movedIn: Date;
   movedOut: Date | null;
 };
+
+// An active resident as the room administration sees them.
+export type ResidentForRoom = {
+  id: string;
+  name: string;
+  // 0 when the resident has no room.
+  roomNumber: number;
+  isHusfar: boolean;
+};

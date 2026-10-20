@@ -4,7 +4,11 @@ import { sortOccupancies } from '../rooms';
 import type { Occupancy } from '../types';
 
 // Loads a list of stays; shared by the room history and a resident's room history.
-const useStays = (key: string | undefined, load: (key: string) => Promise<Occupancy[]>) => {
+const useStays = (
+  key: string | undefined,
+  load: (key: string) => Promise<Occupancy[]>,
+  refreshKey = ''
+) => {
   const [stays, setStays] = useState<Occupancy[]>([]);
   const [loading, setLoading] = useState(Boolean(key));
   const [error, setError] = useState<string | null>(null);
@@ -26,12 +30,14 @@ const useStays = (key: string | undefined, load: (key: string) => Promise<Occupa
     return () => {
       cancelled = true;
     };
-  }, [key, load]);
+  }, [key, load, refreshKey]);
 
   return { stays, loading, error };
 };
 
-export const useRoomHistory = (roomId: string | undefined) => useStays(roomId, getRoomHistory);
+// `refreshKey` reloads the history when something about the room changed, e.g. who lives there.
+export const useRoomHistory = (roomId: string | undefined, refreshKey = '') =>
+  useStays(roomId, getRoomHistory, refreshKey);
 
 export const useUserRoomHistory = (userId: string | undefined) =>
   useStays(userId, getUserRoomHistory);

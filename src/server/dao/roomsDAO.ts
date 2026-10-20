@@ -1,6 +1,12 @@
 import { supabase } from '../supabaseClient';
 import { getRoomCapacity, isRoomType } from '../../features/rooms/rooms';
-import type { Occupancy, Room, RoomOccupant } from '../../features/rooms/types';
+import type {
+  Occupancy,
+  ResidentForRoom,
+  Room,
+  RoomOccupant,
+  RoomType,
+} from '../../features/rooms/types';
 import { parseDateColumnValue } from '../../shared/utils/date';
 
 type NameRelation = { name?: string | null } | { name?: string | null }[] | null | undefined;
@@ -110,6 +116,66 @@ export async function assignResidentToRoom(userId: string, roomId: string | null
   const { error } = await supabase.rpc('assign_resident_to_room', {
     p_user_id: userId,
     p_room_id: roomId,
+  });
+  if (error) throw new Error(error.message);
+}
+
+// Sets the type of one room, or clears it with null. Room managers only (row-level security).
+export async function updateRoomType(roomId: string, type: RoomType | null): Promise<void> {
+  const { data, error } = await supabase
+    .from('rooms')
+    .update({ type })
+    .eq('id', roomId)
+    .select('id');
+  if (error) throw new Error(error.message);
+  // Row-level security turns a forbidden update into "0 rows" rather than an error.
+  if (!data || data.length === 0) throw new Error('Du har ikke tilgang til å endre rommet');
+}
+
+// Sets the same type on every room from `from` to `to`, both included.
+export async function setRoomTypes(
+  from: number,
+  to: number,
+  type: RoomType | null
+): Promise<number> {
+  const { data, error } = await supabase
+    .from('rooms')
+    .update({ type })
+    .gte('number', from)
+    .lte('number', to)
+    .select('id');
+  if (error) throw new Error(error.message);
+  return data?.length ?? 0;
+}
+
+type ResidentRow = {
+  id: string;
+  name: string | null;
+  room_number: number | null;
+  is_husfar: boolean | null;
+};
+
+// Active residents with their current room, for assigning rooms and picking the Husfar.
+export async function getResidentsForRooms(): Promise<ResidentForRoom[]> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, room_number, is_husfar')
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+  if (error) throw new Error(`Could not get residents: ${error.message}`);
+  return ((data ?? []) as ResidentRow[]).map((row) => ({
+    id: row.id,
+    name: row.name ?? 'Ukjent',
+    roomNumber: row.room_number ?? 0,
+    isHusfar: row.is_husfar ?? false,
+  }));
+}
+
+// Makes the resident Husfar (and moves them into husfarhybelen) or removes the flag.
+export async function setHusfar(userId: string, isHusfar: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_husfar', {
+    p_user_id: userId,
+    p_is_husfar: isHusfar,
   });
   if (error) throw new Error(error.message);
 }

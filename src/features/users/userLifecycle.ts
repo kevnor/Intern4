@@ -48,20 +48,6 @@ export const validateUserField = (name: string, value: unknown): UserValidationE
     }
   }
 
-  if (name === 'roomNumber' && value) {
-    const roomNum = typeof value === 'number' ? value : parseInt(String(value));
-    if (isNaN(roomNum)) {
-      errors.roomNumber = 'Romnummer må være et tall';
-    } else if (
-      roomNum !== 60 &&
-      roomNum !== 0 &&
-      !(roomNum >= 100 && roomNum <= 173) &&
-      !(roomNum >= 200 && roomNum <= 273)
-    ) {
-      errors.roomNumber = 'Romnummer må være 060, 0, mellom 100-173, eller mellom 200-273';
-    }
-  }
-
   return errors;
 };
 
