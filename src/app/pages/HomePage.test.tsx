@@ -64,7 +64,7 @@ describe('HomePage', () => {
     renderHome();
 
     expect(screen.getByRole('heading', { name: 'Hei, Bjørn!' })).toBeInTheDocument();
-    expect(await screen.findByText('14 t igjen')).toBeInTheDocument();
+    expect(await screen.findByText('20 t igjen')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /registrer timer/i })).toHaveAttribute(
       'href',
       '/regi?registrer=1'

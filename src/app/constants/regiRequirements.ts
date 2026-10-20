@@ -1,21 +1,32 @@
 import { USER_ROLES } from './userRoles';
 
-export const DEFAULT_REGI_HOURS = 48;
+// Used until an administrator has configured the semester's required hours.
+export const DEFAULT_SEMESTER_HOURS = 48;
 
-const ROLE_REGI_REQUIREMENTS: Record<string, number> = {
-  [USER_ROLES.FULL_WORK]: 48,
-  [USER_ROLES.HALF_HALF]: 18,
-  [USER_ROLES.FULL_RECEPTION]: 0,
-  [USER_ROLES.WORKMANAGER]: 48,
-  [USER_ROLES.DATA]: 48,
-  [USER_ROLES.GENERAL_MANAGER]: 48,
-  [USER_ROLES.ADMIN]: 0,
-  [USER_ROLES.ROOMMANAGER]: 48,
-  [USER_ROLES.COMMITTEE_MEMBER]: 48,
-  [USER_ROLES.USER]: 48,
+export type RequiredHours = {
+  regi: number;
+  vakt: number;
 };
 
-export const getRequiredRegiHoursForRole = (role?: string): number => {
-  if (!role) return DEFAULT_REGI_HOURS;
-  return ROLE_REGI_REQUIREMENTS[role] ?? DEFAULT_REGI_HOURS;
+// Every resident owes the same total each semester. The role decides how it is split between
+// regi (tasks) and vakt (reception shifts).
+export const getRequiredHoursForRole = (
+  role?: string,
+  totalHours: number = DEFAULT_SEMESTER_HOURS
+): RequiredHours => {
+  switch (role) {
+    case USER_ROLES.FULL_RECEPTION:
+      return { regi: 0, vakt: totalHours };
+    case USER_ROLES.HALF_HALF:
+      return { regi: totalHours / 2, vakt: totalHours / 2 };
+    case USER_ROLES.ADMIN:
+      return { regi: 0, vakt: 0 };
+    default:
+      return { regi: totalHours, vakt: 0 };
+  }
 };
+
+export const getRequiredRegiHoursForRole = (
+  role?: string,
+  totalHours: number = DEFAULT_SEMESTER_HOURS
+): number => getRequiredHoursForRole(role, totalHours).regi;

@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../providers/AuthContext';
 import { useHomeData } from './useHomeData';
 import { getRegiTodo, summarizeSemesterRegi } from '../../features/regi/regiSummary';
+import { useSemesterHours } from '../../features/regi/hooks/useSemesterHours';
 import { canApproveWork } from '../../features/regi/permissions';
 import { REGI_PATHS } from '../../features/regi/paths';
 import { PageLayout } from '../../shared/layouts';
@@ -53,7 +54,11 @@ const HomePage = () => {
   const { logs, tasks, pendingApprovals, loading, error } = useHomeData(user);
 
   const userId = user?.id ?? '';
-  const summary = useMemo(() => summarizeSemesterRegi(logs, user?.role), [logs, user?.role]);
+  const { totalHours } = useSemesterHours();
+  const summary = useMemo(
+    () => summarizeSemesterRegi(logs, user?.role, new Date(), totalHours),
+    [logs, user?.role, totalHours]
+  );
   const todo = useMemo(() => getRegiTodo(logs, tasks, userId), [logs, tasks, userId]);
   const showApprovals = canApproveWork(user?.role) && !!pendingApprovals;
   const firstName = user?.name?.split(' ')[0];

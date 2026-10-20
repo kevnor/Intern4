@@ -4,6 +4,7 @@ import { ArrowRight, ClipboardCheck, MessageSquare, Plus, Search } from 'lucide-
 import { useRegiHub } from './RegiHubContext';
 import { getRegiTodo, getSuggestedTasks, summarizeSemesterRegi } from '../regiSummary';
 import { REGI_PATHS } from '../paths';
+import { useSemesterHours } from '../hooks/useSemesterHours';
 import { TaskCard } from '../../tasks/components/TaskCard';
 import {
   Button,
@@ -30,9 +31,10 @@ const OverviewTab = () => {
   const { user, isManager, logs, tasks, taskActions, approvals, categoryColors, openRegister } =
     useRegiHub();
 
+  const { totalHours } = useSemesterHours();
   const summary = useMemo(
-    () => summarizeSemesterRegi(logs.logs, user.role),
-    [logs.logs, user.role]
+    () => summarizeSemesterRegi(logs.logs, user.role, new Date(), totalHours),
+    [logs.logs, user.role, totalHours]
   );
   const todo = useMemo(
     () => getRegiTodo(logs.logs, tasks.tasks, user.id),

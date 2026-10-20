@@ -19,7 +19,8 @@ export type RegiSummary = {
 export const summarizeSemesterRegi = (
   logs: RegiLogWithId[],
   role: string | undefined,
-  now: Date = new Date()
+  now: Date = new Date(),
+  totalHours?: number
 ): RegiSummary => {
   const start = getSemesterStart(now);
   const thisSemester = logs.filter((log) => log.date >= start);
@@ -29,7 +30,7 @@ export const summarizeSemesterRegi = (
       .reduce((total, log) => total + log.hours, 0);
 
   const approved = sum('approved');
-  const required = getRequiredRegiHoursForRole(role);
+  const required = getRequiredRegiHoursForRole(role, totalHours);
 
   return {
     approved,

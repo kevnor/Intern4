@@ -28,7 +28,8 @@ BEGIN
         'work_items',
         'work_tasks',
         'work_assignments',
-        'work_misc'
+        'work_misc',
+        'semester_settings'
       )
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I', _pol, _tbl);
@@ -436,5 +437,51 @@ CREATE POLICY "Managers can delete work_misc"
       JOIN roles r ON u.role_id = r.id
       WHERE u.id = auth.uid()
         AND r.name IN ('Admin', 'Data', 'Regisjef')
+    )
+  );
+
+-- ============================================================
+-- SEMESTER SETTINGS TABLE
+-- ============================================================
+-- Hours every resident owes per semester. Everyone authenticated
+-- can read; only Admin can change it.
+-- ============================================================
+
+ALTER TABLE semester_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can read semester settings"
+  ON semester_settings FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Admins can insert semester settings"
+  ON semester_settings FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM users u
+      JOIN roles r ON u.role_id = r.id
+      WHERE u.id = auth.uid()
+        AND r.name = 'Admin'
+    )
+  );
+
+CREATE POLICY "Admins can update semester settings"
+  ON semester_settings FOR UPDATE
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM users u
+      JOIN roles r ON u.role_id = r.id
+      WHERE u.id = auth.uid()
+        AND r.name = 'Admin'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM users u
+      JOIN roles r ON u.role_id = r.id
+      WHERE u.id = auth.uid()
+        AND r.name = 'Admin'
     )
   );

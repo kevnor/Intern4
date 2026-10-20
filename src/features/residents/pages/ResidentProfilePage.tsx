@@ -30,6 +30,7 @@ import { USER_PATHS } from '../../users/paths';
 import { canApproveWork } from '../../regi/permissions';
 import { REGI_PATHS } from '../../regi/paths';
 import { summarizeSemesterRegi } from '../../regi/regiSummary';
+import { useSemesterHours } from '../../regi/hooks/useSemesterHours';
 
 const ageFrom = (birthDate?: Date) => {
   if (!birthDate) return null;
@@ -81,9 +82,10 @@ const ResidentProfilePage: React.FC = () => {
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
 
   const isSelf = user?.id === id;
+  const { totalHours } = useSemesterHours();
   const summary = useMemo(
-    () => (profile ? summarizeSemesterRegi(logs, profile.role) : null),
-    [logs, profile]
+    () => (profile ? summarizeSemesterRegi(logs, profile.role, new Date(), totalHours) : null),
+    [logs, profile, totalHours]
   );
 
   const backLink = (

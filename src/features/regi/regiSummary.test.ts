@@ -56,7 +56,7 @@ describe('regiSummary', () => {
       new Date(2026, 9, 19)
     );
 
-    expect(summary).toEqual({ approved: 10, pending: 3, required: 18, remaining: 8 });
+    expect(summary).toEqual({ approved: 10, pending: 3, required: 24, remaining: 14 });
   });
 
   it('lists my unfinished tasks with rework first', () => {

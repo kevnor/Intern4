@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getRequiredRegiHoursForRole } from '../../../../app/constants/regiRequirements';
+import {
+  DEFAULT_SEMESTER_HOURS,
+  getRequiredRegiHoursForRole,
+} from '../../../../app/constants/regiRequirements';
 import { canApproveWork } from '../../permissions';
 import { getApprovedRegiHoursByUserSince } from '../../../../server/dao/regiDAO';
 import { getActiveUsersWithRole } from '../../../../server/dao/userDAO';
 import { AuthUser } from '../../../auth/hooks/useAuth';
-import { getSemesterStart } from '../../../../shared/utils/semester';
+import { getRequiredHours } from '../../../../server/dao/semesterSettingsDAO';
+import { getSemester, getSemesterStart } from '../../../../shared/utils/semester';
 
 export type RegistatusRow = {
   id: string;
@@ -28,13 +32,15 @@ export const useRegistatus = (user: AuthUser, authLoading: boolean) => {
       setLoading(true);
       setError(null);
 
-      const [activeUsers, hoursMap] = await Promise.all([
+      const [activeUsers, hoursMap, configuredHours] = await Promise.all([
         getActiveUsersWithRole(),
         getApprovedRegiHoursByUserSince(getSemesterStart()),
+        getRequiredHours(getSemester().key).catch(() => undefined),
       ]);
+      const totalHours = configuredHours ?? DEFAULT_SEMESTER_HOURS;
 
       const nextRows = activeUsers.map((activeUser) => {
-        const requiredHours = getRequiredRegiHoursForRole(activeUser.role);
+        const requiredHours = getRequiredRegiHoursForRole(activeUser.role, totalHours);
         const approvedHours = hoursMap[activeUser.id] ?? 0;
         const remainingHours = Math.max(requiredHours - approvedHours, 0);
 

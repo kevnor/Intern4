@@ -43,7 +43,7 @@ vi.mock('../../../../server/dao/userDAO', () => ({
   ]),
 }));
 vi.mock('../../../../server/dao/regiDAO', () => ({
-  getApprovedRegiHoursByUserSince: vi.fn().mockResolvedValue({ a: 4, b: 18 }),
+  getApprovedRegiHoursByUserSince: vi.fn().mockResolvedValue({ a: 4, b: 24 }),
 }));
 
 describe('Registatus', () => {
@@ -53,7 +53,7 @@ describe('Registatus', () => {
 
     const table = await screen.findByRole('table');
     expect(
-      within(table).getByRole('meter', { name: 'Anne Mangler: 4 t av 18 t' })
+      within(table).getByRole('meter', { name: 'Anne Mangler: 4 t av 24 t' })
     ).toBeInTheDocument();
     expect(within(table).getByText('Mangler timer')).toBeInTheDocument();
     expect(within(table).getByText('Oppfylt')).toBeInTheDocument();
