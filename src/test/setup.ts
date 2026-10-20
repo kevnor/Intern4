@@ -41,3 +41,15 @@ vi.mock('../server/dao/roomReportsDAO', () => ({
   linkReportToTask: vi.fn().mockResolvedValue(undefined),
   withdrawRoomReport: vi.fn().mockResolvedValue(undefined),
 }));
+
+// No romslipp running.
+vi.mock('../server/dao/romslippDAO', () => ({
+  getLatestRomslipp: vi.fn().mockResolvedValue(null),
+  getAvailableRooms: vi.fn().mockResolvedValue([]),
+  getRomslippTurn: vi.fn().mockResolvedValue(null),
+  startRomslipp: vi.fn().mockResolvedValue(undefined),
+  answerRomslipp: vi.fn().mockResolvedValue(undefined),
+  skipRomslipp: vi.fn().mockResolvedValue(undefined),
+  closeRomslipp: vi.fn().mockResolvedValue(undefined),
+  cancelRomslipp: vi.fn().mockResolvedValue(undefined),
+}));

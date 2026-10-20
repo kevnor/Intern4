@@ -35,7 +35,9 @@ BEGIN
         'vakt_swap_log',
         'rooms',
         'room_occupancies',
-        'room_reports'
+        'room_reports',
+        'romslipp_rounds',
+        'romslipp_participants'
       )
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I', _pol, _tbl);
@@ -635,3 +637,25 @@ CREATE POLICY "Reporters can withdraw open reports"
   ON room_reports FOR DELETE
   TO authenticated
   USING (reported_by = auth.uid() AND status = 'open');
+
+-- ============================================================
+-- ROMSLIPP ROUNDS AND PARTICIPANTS TABLES
+-- ============================================================
+-- The room round each semester. Readable by all; changed only by the
+-- functions start_romslipp, romslipp_answer, romslipp_skip,
+-- close_romslipp and cancel_romslipp (migration 20261020220000_add_romslipp),
+-- which check who is on turn and who may act for someone else.
+-- ============================================================
+
+ALTER TABLE romslipp_rounds ENABLE ROW LEVEL SECURITY;
+ALTER TABLE romslipp_participants ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can read romslipp rounds"
+  ON romslipp_rounds FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Authenticated users can read romslipp participants"
+  ON romslipp_participants FOR SELECT
+  TO authenticated
+  USING (true);

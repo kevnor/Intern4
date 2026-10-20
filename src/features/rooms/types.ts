@@ -67,3 +67,41 @@ export type RoomWork = {
   userName: string;
   approved: boolean;
 };
+
+export type RomslippStatus = 'open' | 'closed' | 'cancelled';
+
+export type ParticipantStatus = 'waiting' | 'moved' | 'stayed' | 'skipped';
+
+export type RomslippRound = {
+  id: string;
+  semesterKey: string;
+  status: RomslippStatus;
+  createdAt: Date;
+  closedAt: Date | null;
+};
+
+// One resident in a round. Position is the order they are asked in.
+export type RomslippParticipant = {
+  userId: string;
+  userName: string;
+  position: number;
+  status: ParticipantStatus;
+  fromRoomNumber: number | null;
+  chosenRoomId: string | null;
+  chosenRoomNumber: number | null;
+  answeredAt: Date | null;
+  answeredByName: string | null;
+};
+
+export type RomslippState = {
+  round: RomslippRound;
+  participants: RomslippParticipant[];
+};
+
+// A room with space in the round as it stands now.
+export type AvailableRoom = {
+  roomId: string;
+  number: number;
+  type: RoomType | null;
+  freeSpots: number;
+};
