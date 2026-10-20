@@ -66,6 +66,23 @@ from auth.users where email = 'you@example.com';
 
 `npx supabase db reset` wipes local data and re-runs the migrations. Seed again after a reset.
 
+#### Optional: mock data
+
+To try Vakt and Regi with realistic data, load the mock residents, schedule, tasks and hours.
+**Local database only, never a hosted project.** Seed the roles and your own Admin login first
+(above), then:
+
+```sh
+DB=$(docker ps --format '{{.Names}}' | grep supabase_db)
+docker exec -i $DB psql -U postgres < supabase/mock/vakt-mock-data.sql
+docker exec -i $DB psql -U postgres < supabase/mock/regi-mock-data.sql
+```
+
+This adds 70 residents (`mock01@mock.test` to `mock70@mock.test`, password `mock1234`;
+`mock01` is the Vaktsjef), a published schedule for the current semester with swaps, and regi
+tasks and hours in every state. A few shifts and regi entries go to your Admin login. Run the vakt
+script first. Both can be re-run: they remove the earlier mock data and recreate it.
+
 ### 5. Run the app
 
 ```sh
