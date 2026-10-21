@@ -175,6 +175,11 @@ const RoundView = ({
   const mine = participants.find((participant) => participant.userId === userId);
   const myTurn = isOpen && turn?.userId === userId;
 
+  const openConfirm = (kind: 'close' | 'cancel') => {
+    romslipp.clearError();
+    setConfirming(kind);
+  };
+
   const confirm = async () => {
     const ok = confirming === 'close' ? await romslipp.close() : await romslipp.cancel();
     if (ok) setConfirming(null);
@@ -252,14 +257,14 @@ const RoundView = ({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setConfirming('cancel')}
+                onClick={() => openConfirm('cancel')}
                 disabled={romslipp.busy}
               >
                 Avbryt romslipp
               </Button>
               <Button
                 size="sm"
-                onClick={() => setConfirming('close')}
+                onClick={() => openConfirm('close')}
                 disabled={romslipp.busy || !canCloseRound(participants)}
               >
                 Avslutt romslipp
@@ -330,8 +335,13 @@ const RoundView = ({
         onConfirm={() => void confirm()}
         onCancel={() => setConfirming(null)}
       >
-        {countMoves(participants)} beboere flytter til rommene de valgte. Flyttingene får dagens
-        dato i romhistorikken.
+        <div className="space-y-3">
+          {romslipp.error && <StatusMessage tone="error">{romslipp.error}</StatusMessage>}
+          <p>
+            {countMoves(participants)} beboere flytter til rommene de valgte. Flyttingene får dagens
+            dato i romhistorikken.
+          </p>
+        </div>
       </ConfirmDialog>
       <ConfirmDialog
         open={confirming === 'cancel'}
@@ -342,7 +352,10 @@ const RoundView = ({
         onConfirm={() => void confirm()}
         onCancel={() => setConfirming(null)}
       >
-        Svarene forkastes og ingen flytter. Du kan starte et nytt romslipp etterpå.
+        <div className="space-y-3">
+          {romslipp.error && <StatusMessage tone="error">{romslipp.error}</StatusMessage>}
+          <p>Svarene forkastes og ingen flytter. Du kan starte et nytt romslipp etterpå.</p>
+        </div>
       </ConfirmDialog>
     </div>
   );
@@ -359,7 +372,7 @@ const RomslippTab = ({ romslipp, userId, canManage }: RomslippTabProps) => {
 
   return (
     <div className="space-y-6">
-      {romslipp.error && (
+      {romslipp.error && !starting && (
         <StatusMessage tone="error" onDismiss={romslipp.clearError}>
           {romslipp.error}
         </StatusMessage>
@@ -373,7 +386,10 @@ const RomslippTab = ({ romslipp, userId, canManage }: RomslippTabProps) => {
             canManage ? (
               <Button
                 icon={<Play aria-hidden="true" className="h-4 w-4" />}
-                onClick={() => setStarting(true)}
+                onClick={() => {
+                  romslipp.clearError();
+                  setStarting(true);
+                }}
                 disabled={romslipp.busy}
               >
                 Start romslipp
@@ -413,8 +429,13 @@ const RomslippTab = ({ romslipp, userId, canManage }: RomslippTabProps) => {
         onConfirm={() => void romslipp.start(semester.key).then((ok) => ok && setStarting(false))}
         onCancel={() => setStarting(false)}
       >
-        Beboere med rom, som ikke er på permisjon eller Husfar, får svare i rekkefølge etter
-        ansiennitet. Mens romslippet pågår kan ikke rom tildeles for hånd.
+        <div className="space-y-3">
+          {romslipp.error && <StatusMessage tone="error">{romslipp.error}</StatusMessage>}
+          <p>
+            Beboere med rom, som ikke er på permisjon eller Husfar, får svare i rekkefølge etter
+            ansiennitet. Mens romslippet pågår kan ikke rom tildeles for hånd.
+          </p>
+        </div>
       </ConfirmDialog>
     </div>
   );

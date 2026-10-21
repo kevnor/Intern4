@@ -9,6 +9,7 @@ import {
 import { addTask } from '../../../server/dao/tasksDAO';
 import type { TaskCreationData } from '../../../shared/types/regi/tasks';
 import type { RoomReport, RoomReportStatus } from '../types';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 type Options = {
   // Reports for one room, or for everyone the signed-in user may see when left out.
@@ -29,7 +30,7 @@ export const useRoomReports = ({ roomId, enabled = true }: Options = {}) => {
       setReports(await getRoomReports(roomId));
     } catch (loadError) {
       console.error(loadError);
-      setError('Kunne ikke laste meldingene.');
+      setError(getErrorMessage(loadError, 'Kunne ikke laste meldingene.'));
     } finally {
       setLoading(false);
     }
@@ -49,9 +50,7 @@ export const useRoomReports = ({ roomId, enabled = true }: Options = {}) => {
         return true;
       } catch (actionError) {
         console.error(actionError);
-        setError(
-          actionError instanceof Error && actionError.message ? actionError.message : failure
-        );
+        setError(getErrorMessage(actionError, failure));
         return false;
       } finally {
         setBusy(false);

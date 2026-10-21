@@ -101,4 +101,18 @@ describe('useRoomAdmin', () => {
     expect(ok).toBe(false);
     expect(result.current.error).toBe('Rommet er fullt');
   });
+
+  it('explains a technical failure in plain Norwegian', async () => {
+    vi.mocked(assignResidentToRoom).mockRejectedValueOnce(
+      new Error('insert or update violates foreign key constraint "room_occupancies_room_id_fkey"')
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = await setup();
+
+    await act(async () => {
+      await result.current.assign('a', 'r101');
+    });
+
+    expect(result.current.error).toBe('Dette kan ikke gjøres fordi noe annet er knyttet til det.');
+  });
 });

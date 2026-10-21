@@ -79,4 +79,19 @@ describe('ShiftEditModal', () => {
 
     expect(screen.getByRole('option', { name: /Bjørn.*permisjon/ })).toBeInTheDocument();
   });
+
+  it('shows why saving failed, inside the dialog', () => {
+    render(
+      <ShiftEditModal
+        shift={shift}
+        users={users}
+        busy={false}
+        error="Du har ikke tilgang til å gjøre dette."
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Du har ikke tilgang til å gjøre dette.');
+  });
 });

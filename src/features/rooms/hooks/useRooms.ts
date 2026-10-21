@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getRooms } from '../../../server/dao/roomsDAO';
 import type { Room } from '../types';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 // All rooms with who lives in them, loaded once for the whole Rom page.
 export const useRooms = () => {
@@ -14,7 +15,7 @@ export const useRooms = () => {
       setRooms(await getRooms());
     } catch (loadError) {
       console.error(loadError);
-      setError('Kunne ikke laste rommene. Prøv å oppdatere siden.');
+      setError(getErrorMessage(loadError, 'Kunne ikke laste rommene. Prøv å oppdatere siden.'));
     } finally {
       setLoading(false);
     }

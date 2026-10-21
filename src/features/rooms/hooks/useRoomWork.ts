@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getRoomWork } from '../../../server/dao/roomsDAO';
 import type { RoomWork } from '../types';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 // Regi work done on a room, for the room's page.
 export const useRoomWork = (roomId: string | undefined) => {
@@ -17,7 +18,8 @@ export const useRoomWork = (roomId: string | undefined) => {
       })
       .catch((loadError) => {
         console.error(loadError);
-        if (!cancelled) setError('Kunne ikke laste arbeidet som er gjort på rommet.');
+        if (!cancelled)
+          setError(getErrorMessage(loadError, 'Kunne ikke laste arbeidet som er gjort på rommet.'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

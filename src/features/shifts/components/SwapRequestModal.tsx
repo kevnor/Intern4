@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Field, Input, Modal } from '../../../shared/components';
+import { Button, Field, Input, Modal, StatusMessage } from '../../../shared/components';
 import { formatDayMonth, formatWeekday } from '../calendar';
 import { SLOT_LABELS, SLOT_NAMES } from '../slots';
 import type { Shift } from '../types';
@@ -7,6 +7,7 @@ import type { Shift } from '../types';
 type SwapRequestModalProps = {
   shift: Shift;
   busy: boolean;
+  error?: string | null;
   onRequest: (shiftId: string, amount: number | null, note: string) => Promise<boolean>;
   onCancelSwap: (shiftId: string) => Promise<boolean>;
   onClose: () => void;
@@ -16,6 +17,7 @@ type SwapRequestModalProps = {
 const SwapRequestModal = ({
   shift,
   busy,
+  error,
   onRequest,
   onCancelSwap,
   onClose,
@@ -59,6 +61,7 @@ const SwapRequestModal = ({
       }
     >
       <div className="space-y-4">
+        {error && <StatusMessage tone="error">{error}</StatusMessage>}
         <p className="text-sm text-muted">
           Vakten vises for alle beboere som ledig for bytte. Du har den til noen har tatt den.
         </p>

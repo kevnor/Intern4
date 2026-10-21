@@ -90,14 +90,17 @@ const MyRoomTab = ({ rooms, loading, userId }: MyRoomTabProps) => {
             <Button
               size="sm"
               icon={<Wrench aria-hidden="true" className="h-4 w-4" />}
-              onClick={() => setReporting(true)}
+              onClick={() => {
+                reports.clearError();
+                setReporting(true);
+              }}
             >
               Meld problem
             </Button>
           }
         >
           <div className="space-y-3">
-            {reports.error && (
+            {reports.error && !reporting && (
               <StatusMessage tone="error" onDismiss={reports.clearError}>
                 {reports.error}
               </StatusMessage>
@@ -140,6 +143,7 @@ const MyRoomTab = ({ rooms, loading, userId }: MyRoomTabProps) => {
         <ReportProblemModal
           roomNumber={room.number}
           busy={reports.busy}
+          error={reports.error}
           onSubmit={(title, description) =>
             reports.report({ roomId: room.id, reportedBy: userId, title, description })
           }

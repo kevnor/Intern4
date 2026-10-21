@@ -62,14 +62,20 @@ const VaktHubPage = () => {
 
   const openSwaps = getOpenSwaps(shifts, user.id);
   const closeDialog = () => setDialog(null);
+  // Starts from a clean slate: an old failure shouldn't greet the next dialog.
+  const openDialog = (next: NonNullable<Dialog>) => {
+    swaps.clearError();
+    admin.clearError();
+    setDialog(next);
+  };
 
   // What picking a shift in the plan does: managers change it, residents swap or take it.
   const canSelect = (shift: Shift) =>
     isManager || canRequestSwap(shift, user.id) || openSwaps.some((open) => open.id === shift.id);
   const selectShift = (shift: Shift) => {
-    if (isManager) setDialog({ kind: 'edit', shift });
-    else if (shift.userId === user.id) setDialog({ kind: 'swap', shift });
-    else setDialog({ kind: 'claim', shift });
+    if (isManager) openDialog({ kind: 'edit', shift });
+    else if (shift.userId === user.id) openDialog({ kind: 'swap', shift });
+    else openDialog({ kind: 'claim', shift });
   };
 
   return (
@@ -90,7 +96,7 @@ const VaktHubPage = () => {
       />
 
       {error && <StatusMessage tone="error">{error}</StatusMessage>}
-      {swaps.error && (
+      {swaps.error && !dialog && (
         <StatusMessage tone="error" onDismiss={swaps.clearError}>
           {swaps.error}
         </StatusMessage>
@@ -105,7 +111,7 @@ const VaktHubPage = () => {
               userId={user.id}
               role={user.role}
               totalHours={totalHours}
-              onSwap={(shift) => setDialog({ kind: 'swap', shift })}
+              onSwap={(shift) => openDialog({ kind: 'swap', shift })}
             />
             <UnavailabilityCard unavailability={unavailability} />
           </>
@@ -128,8 +134,8 @@ const VaktHubPage = () => {
             loading={loading}
             busy={swaps.busy}
             userId={user.id}
-            onClaim={(shift) => setDialog({ kind: 'claim', shift })}
-            onManageMine={(shift) => setDialog({ kind: 'swap', shift })}
+            onClaim={(shift) => openDialog({ kind: 'claim', shift })}
+            onManageMine={(shift) => openDialog({ kind: 'swap', shift })}
             onMarkPaid={(logId, paid) => void swaps.markPaid(logId, paid)}
           />
         )}
@@ -142,6 +148,7 @@ const VaktHubPage = () => {
           shift={dialog.shift}
           users={admin.users}
           busy={admin.busy}
+          error={admin.error}
           onSave={admin.assignShift}
           onClose={closeDialog}
         />
@@ -151,6 +158,7 @@ const VaktHubPage = () => {
           key={dialog.shift.id}
           shift={dialog.shift}
           busy={swaps.busy}
+          error={swaps.error}
           onRequest={swaps.request}
           onCancelSwap={swaps.cancel}
           onClose={closeDialog}
@@ -161,6 +169,7 @@ const VaktHubPage = () => {
           key={dialog.shift.id}
           shift={dialog.shift}
           busy={swaps.busy}
+          error={swaps.error}
           restConflict={hasRestConflict(shifts, user.id, dialog.shift)}
           onClaim={swaps.claim}
           onClose={closeDialog}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Field, Modal, Select } from '../../../shared/components';
+import { Button, Field, Modal, Select, StatusMessage } from '../../../shared/components';
 import { formatDayMonth, formatWeekday } from '../calendar';
 import { SLOT_LABELS, SLOT_NAMES } from '../slots';
 import type { Shift } from '../types';
@@ -9,13 +9,15 @@ type ShiftEditModalProps = {
   shift: Shift;
   users: BasicUserWithRole[];
   busy: boolean;
+  // Why the last save failed; shown here because the modal covers the page.
+  error?: string | null;
   onSave: (shiftId: string, userId: string | null) => Promise<boolean>;
   onClose: () => void;
 };
 
 // Rendered only while a shift is being edited, so the form always starts from that shift.
 // Lets the Vaktsjef put anyone on a shift, or free it again.
-const ShiftEditModal = ({ shift, users, busy, onSave, onClose }: ShiftEditModalProps) => {
+const ShiftEditModal = ({ shift, users, busy, error, onSave, onClose }: ShiftEditModalProps) => {
   const [userId, setUserId] = useState(shift.userId ?? '');
 
   const handleSave = async () => {
@@ -40,6 +42,11 @@ const ShiftEditModal = ({ shift, users, busy, onSave, onClose }: ShiftEditModalP
         </>
       }
     >
+      {error && (
+        <StatusMessage tone="error" className="mb-4">
+          {error}
+        </StatusMessage>
+      )}
       <Field label="Hvem har vakten?">
         {(controlProps) => (
           <Select

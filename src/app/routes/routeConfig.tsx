@@ -1,4 +1,3 @@
-import { lazy } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { Navigate } from 'react-router-dom';
 import NotFoundPage from '../pages/NotFoundPage';
@@ -6,9 +5,10 @@ import ProtectedRoute from './ProtectedRoute';
 import { APP_ROUTES } from '../constants/appRoutes';
 import { features } from '../../features';
 import type { FeatureRoute } from '../../shared/types/feature';
+import { lazyWithRetry } from '../lazyWithRetry';
 
 // Pages load on first visit, so the first download only contains the app shell.
-const HomePage = lazy(() => import('../pages/HomePage'));
+const HomePage = lazyWithRetry(() => import('../pages/HomePage'));
 
 const featureRoutes: FeatureRoute[] = features.flatMap((feature) => feature.routes ?? []);
 

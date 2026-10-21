@@ -1,10 +1,10 @@
-import { lazy } from 'react';
 import type { FeatureRoute } from '../../shared/types/feature';
 import { AUTH_PATHS } from './paths';
+import { lazyWithRetry } from '../../app/lazyWithRetry';
 
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
-const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const LoginPage = lazyWithRetry(() => import('./pages/LoginPage'));
+const ForgotPasswordPage = lazyWithRetry(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazyWithRetry(() => import('./pages/ResetPasswordPage'));
 
 export const authRoutes: FeatureRoute[] = [
   {

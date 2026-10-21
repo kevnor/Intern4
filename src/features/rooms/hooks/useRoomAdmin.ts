@@ -8,6 +8,7 @@ import {
 } from '../../../server/dao/roomsDAO';
 import { getHusfar, getHusfarRoom, getResidentsWithoutRoom } from '../rooms';
 import type { ResidentForRoom, Room, RoomType } from '../types';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 type Options = {
   enabled: boolean;
@@ -31,7 +32,7 @@ export const useRoomAdmin = ({ enabled, rooms, reloadRooms }: Options) => {
       setResidents(await getResidentsForRooms());
     } catch (loadError) {
       console.error(loadError);
-      setError('Kunne ikke laste beboerne.');
+      setError(getErrorMessage(loadError, 'Kunne ikke laste beboerne.'));
     } finally {
       setLoading(false);
     }
@@ -53,7 +54,7 @@ export const useRoomAdmin = ({ enabled, rooms, reloadRooms }: Options) => {
         return true;
       } catch (actionError) {
         console.error(actionError);
-        setError(actionError instanceof Error ? actionError.message : 'Noe gikk galt.');
+        setError(getErrorMessage(actionError, 'Noe gikk galt. Prøv igjen.'));
         return false;
       } finally {
         setBusy(false);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getRoomHistory, getUserRoomHistory } from '../../../server/dao/roomsDAO';
 import { sortOccupancies } from '../rooms';
 import type { Occupancy } from '../types';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 // Loads a list of stays; shared by the room history and a resident's room history.
 const useStays = (
@@ -22,7 +23,7 @@ const useStays = (
       })
       .catch((loadError) => {
         console.error(loadError);
-        if (!cancelled) setError('Kunne ikke laste romhistorikken.');
+        if (!cancelled) setError(getErrorMessage(loadError, 'Kunne ikke laste romhistorikken.'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

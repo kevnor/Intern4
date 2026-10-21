@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RotateCcw, UserPlus } from 'lucide-react';
 import { getResidentDirectoryUsers, reactivateUser } from '../../../server/dao/userDAO';
@@ -37,9 +37,10 @@ import CreatedUserDialog from '../components/CreatedUserDialog';
 import { useProfilePictureUrls } from '../hooks/useProfilePictureUrls';
 import { useUserAdminLookups } from '../hooks/useUserAdminLookups';
 import { canAccessRoomManagement } from '../../users/permissions';
+import { lazyWithRetry } from '../../../app/lazyWithRetry';
 
 // The charts library is large, so it only loads when Statistikk is opened.
-const StatisticsDashboard = lazy(() =>
+const StatisticsDashboard = lazyWithRetry(() =>
   import('../components/ResidentStatistics').then((module) => ({
     default: module.StatisticsDashboard,
   }))

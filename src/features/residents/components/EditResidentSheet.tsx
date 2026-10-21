@@ -19,6 +19,7 @@ import { normalizePhoneNumber, validatePhoneNumber } from '../../../shared/utils
 import { validateUserField } from '../../users/userLifecycle';
 import { canAssignRole, canAssignRoles } from '../../users/permissions';
 import type { ResidentProfile } from '../hooks/useResidentProfile';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 type EditResidentSheetProps = {
   open: boolean;
@@ -114,7 +115,7 @@ const EditResidentSheet: React.FC<EditResidentSheetProps> = ({
       });
       onSaved();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Kunne ikke lagre endringene.');
+      setSaveError(getErrorMessage(error, 'Kunne ikke lagre endringene.'));
     } finally {
       setSaving(false);
     }

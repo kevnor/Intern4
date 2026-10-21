@@ -30,7 +30,7 @@ const ReportsTab = ({ reports, canCreateTask }: ReportsTabProps) => {
 
   return (
     <div className="space-y-4">
-      {reports.error && (
+      {reports.error && !taskFor && (
         <StatusMessage tone="error" onDismiss={reports.clearError}>
           {reports.error}
         </StatusMessage>
@@ -62,7 +62,13 @@ const ReportsTab = ({ reports, canCreateTask }: ReportsTabProps) => {
             renderActions={(report) => (
               <>
                 {report.status === 'open' && canCreateTask && (
-                  <Button size="sm" onClick={() => setTaskFor(report)}>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      reports.clearError();
+                      setTaskFor(report);
+                    }}
+                  >
                     Lag oppgave
                   </Button>
                 )}
@@ -109,6 +115,7 @@ const ReportsTab = ({ reports, canCreateTask }: ReportsTabProps) => {
           key={taskFor.id}
           report={taskFor}
           busy={reports.busy}
+          error={reports.error}
           onCreate={reports.createTask}
           onClose={() => setTaskFor(null)}
         />

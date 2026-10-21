@@ -82,6 +82,34 @@ describe('RomslippTab with no round', () => {
   });
 });
 
+describe('RomslippTab errors', () => {
+  it('shows why a round could not be started inside the dialog', async () => {
+    const user = userEvent.setup();
+    const romslipp = make(null, { error: 'Et romslipp pågår allerede' });
+    renderTab(romslipp, 'u1', true);
+
+    await user.click(screen.getByRole('button', { name: 'Start romslipp' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Starte romslipp?' });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Et romslipp pågår allerede');
+    // The stale error is cleared when the dialog opens.
+    expect(romslipp.clearError).toHaveBeenCalled();
+  });
+
+  it('shows why closing failed inside the dialog', async () => {
+    const user = userEvent.setup();
+    const done = make(open([participant(1, 'Anne', { status: 'stayed' })]), {
+      error: 'Rom 273 er blitt fullt siden romslippet startet',
+    });
+    renderTab(done, 'manager', true);
+
+    await user.click(screen.getByRole('button', { name: 'Avslutt romslipp' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Avslutte romslippet?' });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Rom 273 er blitt fullt');
+  });
+});
+
 describe('RomslippTab during a round', () => {
   const participants = [
     participant(1, 'Anne', { status: 'moved', chosenRoomId: 'r9', chosenRoomNumber: 273 }),

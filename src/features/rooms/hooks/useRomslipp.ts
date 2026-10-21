@@ -9,6 +9,7 @@ import {
   startRomslipp,
 } from '../../../server/dao/romslippDAO';
 import type { AvailableRoom, RomslippState } from '../types';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 // How often an open round is refreshed, so a resident sees it become their turn.
 const POLL_MS = 15_000;
@@ -29,7 +30,7 @@ export const useRomslipp = (enabled = true) => {
       setAvailable(latest?.round.status === 'open' ? await getAvailableRooms(latest.round.id) : []);
     } catch (loadError) {
       console.error(loadError);
-      setError('Kunne ikke laste romslippet.');
+      setError(getErrorMessage(loadError, 'Kunne ikke laste romslippet.'));
     } finally {
       setLoading(false);
     }
@@ -58,9 +59,7 @@ export const useRomslipp = (enabled = true) => {
         return true;
       } catch (actionError) {
         console.error(actionError);
-        setError(
-          actionError instanceof Error && actionError.message ? actionError.message : failure
-        );
+        setError(getErrorMessage(actionError, failure));
         // Someone else may have answered in the meantime.
         await load();
         return false;

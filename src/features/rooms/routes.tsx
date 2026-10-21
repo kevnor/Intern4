@@ -1,9 +1,9 @@
-import { lazy } from 'react';
 import type { FeatureRoute } from '../../shared/types/feature';
 import { ROOM_PATHS } from './paths';
+import { lazyWithRetry } from '../../app/lazyWithRetry';
 
-const RoomsHubPage = lazy(() => import('./pages/RoomsHubPage'));
-const RoomDetailPage = lazy(() => import('./pages/RoomDetailPage'));
+const RoomsHubPage = lazyWithRetry(() => import('./pages/RoomsHubPage'));
+const RoomDetailPage = lazyWithRetry(() => import('./pages/RoomDetailPage'));
 
 // The hub is one splat route so it stays mounted while switching tabs.
 export const roomRoutes: FeatureRoute[] = [

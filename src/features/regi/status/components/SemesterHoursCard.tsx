@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSemesterHours } from '../../hooks/useSemesterHours';
 import { Button, Card, Field, Input, StatusMessage } from '../../../../shared/components';
 import { getSemesterName } from '../../../../shared/utils/semester';
+import { getErrorMessage } from '../../../../shared/utils/errors';
 
 type SemesterHoursCardProps = {
   onSaved?: () => void;
@@ -34,7 +35,7 @@ const SemesterHoursCard: React.FC<SemesterHoursCardProps> = ({ onSaved }) => {
       onSaved?.();
     } catch (error) {
       console.error(error);
-      setMessage({ tone: 'error', text: 'Kunne ikke lagre timekravet.' });
+      setMessage({ tone: 'error', text: getErrorMessage(error, 'Kunne ikke lagre timekravet.') });
     } finally {
       setSaving(false);
     }

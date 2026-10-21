@@ -2,6 +2,7 @@ import { BrowserRouter, useLocation } from 'react-router-dom';
 import { AuthProvider } from './app/providers/AuthContext';
 import { ThemeProvider } from './app/providers/ThemeProvider';
 import AppRouter from './app/routes/AppRouter';
+import ErrorBoundary from './app/components/ErrorBoundary';
 import Navbar from './app/layout/Navbar';
 import MobileTabBar from './app/layout/MobileTabBar';
 import { AUTH_PATHS } from './features/auth/paths';
@@ -34,15 +35,18 @@ const AppContent = () => {
   );
 };
 
+// The outer boundary catches what the page boundary can't: a crash in the menu or a provider.
 const App = () => {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <AppContent />
-        </BrowserRouter>
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <AppContent />
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 };
 

@@ -17,6 +17,7 @@ import {
 type CreateTaskFromReportModalProps = {
   report: RoomReport;
   busy: boolean;
+  error?: string | null;
   onCreate: (reportId: string, task: TaskCreationData) => Promise<boolean>;
   onClose: () => void;
 };
@@ -25,6 +26,7 @@ type CreateTaskFromReportModalProps = {
 const CreateTaskFromReportModal = ({
   report,
   busy,
+  error,
   onCreate,
   onClose,
 }: CreateTaskFromReportModalProps) => {
@@ -109,6 +111,7 @@ const CreateTaskFromReportModal = ({
       }
     >
       <form id={formId} onSubmit={handleSubmit} className="space-y-4" noValidate>
+        {error && <StatusMessage tone="error">{error}</StatusMessage>}
         {loadError && <StatusMessage tone="error">Kunne ikke laste kategoriene.</StatusMessage>}
         <Field label="Tittel" required>
           {(field) => <Input {...field} value={title} onChange={(e) => setTitle(e.target.value)} />}

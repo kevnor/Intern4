@@ -43,4 +43,18 @@ describe('ReportProblemModal', () => {
 
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('shows why sending failed, inside the dialog', () => {
+    render(
+      <ReportProblemModal
+        roomNumber={214}
+        busy={false}
+        error="Ingen kontakt med serveren. Sjekk nettverket og prøv igjen."
+        onSubmit={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Ingen kontakt med serveren');
+  });
 });

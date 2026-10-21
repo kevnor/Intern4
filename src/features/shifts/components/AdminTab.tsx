@@ -42,7 +42,11 @@ const AdminTab = ({ admin }: AdminTabProps) => {
 
   return (
     <div className="space-y-6">
-      {error && <StatusMessage tone="error">{error}</StatusMessage>}
+      {error && (
+        <StatusMessage tone="error" onDismiss={admin.clearError}>
+          {error}
+        </StatusMessage>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatTile
