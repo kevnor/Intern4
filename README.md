@@ -68,20 +68,26 @@ from auth.users where email = 'you@example.com';
 
 #### Optional: mock data
 
-To try Vakt and Regi with realistic data, load the mock residents, schedule, tasks and hours.
-**Local database only, never a hosted project.** Seed the roles and your own Admin login first
-(above), then:
+To try Vakt, Regi and Rom with realistic data, load the mock residents, schedule, tasks, rooms and
+hours. **Local database only, never a hosted project.** Seed the roles and your own Admin login
+first (above), then:
 
 ```sh
 DB=$(docker ps --format '{{.Names}}' | grep supabase_db)
 docker exec -i $DB psql -U postgres < supabase/mock/vakt-mock-data.sql
 docker exec -i $DB psql -U postgres < supabase/mock/regi-mock-data.sql
+docker exec -i $DB psql -U postgres < supabase/mock/rooms-mock-data.sql
+# Optional: start a romslipp with the first residents already answered.
+docker exec -i $DB psql -U postgres < supabase/mock/romslipp-mock-round.sql
 ```
 
-This adds 70 residents (`mock01@mock.test` to `mock70@mock.test`, password `mock1234`;
-`mock01` is the Vaktsjef), a published schedule for the current semester with swaps, and regi
-tasks and hours in every state. A few shifts and regi entries go to your Admin login. Run the vakt
-script first. Both can be re-run: they remove the earlier mock data and recreate it.
+This adds 70 residents (`mock01@mock.test` to `mock70@mock.test`, password `mock1234`; `mock01` is
+the Vaktsjef, `mock69` the Regisjef and `mock70` the Romsjef), a published vakt schedule with swaps,
+regi tasks and hours in every state, and room types, shared rooms, room history, former residents,
+problem reports and work on rooms. A few shifts and regi entries go to your Admin login. Run the
+scripts in the order above. They can be re-run: they remove the earlier mock data and recreate it.
+Room types stay set afterwards. A romslipp that is running blocks assigning rooms by hand, so cancel
+it from Rom → Romslipp when you want to use Administrer.
 
 ### 5. Run the app
 

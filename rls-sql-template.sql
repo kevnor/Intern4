@@ -32,7 +32,12 @@ BEGIN
         'semester_settings',
         'vakt_shifts',
         'vakt_unavailability',
-        'vakt_swap_log'
+        'vakt_swap_log',
+        'rooms',
+        'room_occupancies',
+        'room_reports',
+        'romslipp_rounds',
+        'romslipp_participants'
       )
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I', _pol, _tbl);
@@ -562,3 +567,95 @@ CREATE POLICY "Residents can read their own swaps"
     OR to_user_id = auth.uid()
     OR public.is_vakt_manager()
   );
+
+-- ============================================================
+-- ROOMS AND ROOM OCCUPANCIES TABLES
+-- ============================================================
+-- The list of rooms is fixed; Admin, Romsjef and Data (public.is_room_manager(),
+-- created by migration 20261020180000_add_rooms) can change a room's type.
+-- Occupancies are the history of who lived where. They are readable by all
+-- and written only by assign_resident_to_room() and the triggers on users.
+-- ============================================================
+
+ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE room_occupancies ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can read rooms"
+  ON rooms FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Room managers can update rooms"
+  ON rooms FOR UPDATE
+  TO authenticated
+  USING (public.is_room_manager())
+  WITH CHECK (public.is_room_manager());
+
+CREATE POLICY "Authenticated users can read room occupancies"
+  ON room_occupancies FOR SELECT
+  TO authenticated
+  USING (true);
+
+-- ============================================================
+-- ROOM REPORTS TABLE
+-- ============================================================
+-- Problems in a room. Residents report for the room they live in
+-- (public.is_room_occupant); Admin, Data, Regisjef and Romsjef
+-- (public.is_room_report_manager) read and handle them. Created by
+-- migration 20261020200000_add_room_reports, which also limits the
+-- column privileges: only status and work_item_id can be updated.
+-- ============================================================
+
+ALTER TABLE room_reports ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Residents and managers can read room reports"
+  ON room_reports FOR SELECT
+  TO authenticated
+  USING (
+    reported_by = auth.uid()
+    OR public.is_room_occupant(room_id)
+    OR public.is_room_report_manager()
+  );
+
+CREATE POLICY "Residents can report problems in their own room"
+  ON room_reports FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    reported_by = auth.uid()
+    AND status = 'open'
+    AND work_item_id IS NULL
+    AND public.is_room_occupant(room_id)
+  );
+
+CREATE POLICY "Managers can handle room reports"
+  ON room_reports FOR UPDATE
+  TO authenticated
+  USING (public.is_room_report_manager())
+  WITH CHECK (public.is_room_report_manager());
+
+CREATE POLICY "Reporters can withdraw open reports"
+  ON room_reports FOR DELETE
+  TO authenticated
+  USING (reported_by = auth.uid() AND status = 'open');
+
+-- ============================================================
+-- ROMSLIPP ROUNDS AND PARTICIPANTS TABLES
+-- ============================================================
+-- The room round each semester. Readable by all; changed only by the
+-- functions start_romslipp, romslipp_answer, romslipp_skip,
+-- close_romslipp and cancel_romslipp (migration 20261020220000_add_romslipp),
+-- which check who is on turn and who may act for someone else.
+-- ============================================================
+
+ALTER TABLE romslipp_rounds ENABLE ROW LEVEL SECURITY;
+ALTER TABLE romslipp_participants ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can read romslipp rounds"
+  ON romslipp_rounds FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Authenticated users can read romslipp participants"
+  ON romslipp_participants FOR SELECT
+  TO authenticated
+  USING (true);

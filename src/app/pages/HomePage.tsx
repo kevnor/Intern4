@@ -4,6 +4,7 @@ import {
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
+  DoorOpen,
   Plus,
   Search,
   Send,
@@ -16,6 +17,8 @@ import { useSemesterHours } from '../../features/regi/hooks/useSemesterHours';
 import { useVaktHours } from '../../features/shifts/hooks/useVaktHours';
 import { VaktProgress } from '../../features/shifts/components/VaktProgress';
 import { hasVakt } from '../../features/shifts/vaktSummary';
+import { useMyRomslippTurn } from '../../features/rooms/hooks/useMyRomslippTurn';
+import { ROOM_PATHS } from '../../features/rooms/paths';
 import { canApproveWork } from '../../features/regi/permissions';
 import { REGI_PATHS } from '../../features/regi/paths';
 import { PageLayout } from '../../shared/layouts';
@@ -64,6 +67,7 @@ const HomePage = () => {
     [logs, user?.role, totalHours]
   );
   const todo = useMemo(() => getRegiTodo(logs, tasks, userId), [logs, tasks, userId]);
+  const myRomslippTurn = useMyRomslippTurn(user?.id);
   const showApprovals = canApproveWork(user?.role) && !!pendingApprovals;
   const firstName = user?.name?.split(' ')[0];
   const progress = summary.required > 0 ? Math.min(summary.approved / summary.required, 1) : 1;
@@ -147,13 +151,21 @@ const HomePage = () => {
             <div className="p-4">
               <Skeleton className="h-24" />
             </div>
-          ) : todo.count === 0 && !showApprovals ? (
+          ) : todo.count === 0 && !showApprovals && !myRomslippTurn ? (
             <p className="flex items-center gap-3 px-4 py-6 text-sm text-muted sm:px-5">
               <CheckCircle2 aria-hidden="true" className="h-5 w-5 text-success" />
               Ingenting venter på deg akkurat nå.
             </p>
           ) : (
             <ul className="divide-y divide-border">
+              {myRomslippTurn && (
+                <TodoItem
+                  to={ROOM_PATHS.ROMSLIPP}
+                  icon={<DoorOpen className="h-5 w-5 text-primary" />}
+                  title="Det er din tur i romslippet"
+                  detail="Velg et rom, eller bli boende"
+                />
+              )}
               {showApprovals && (
                 <TodoItem
                   to={REGI_PATHS.GODKJENNING}

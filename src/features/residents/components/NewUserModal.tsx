@@ -2,6 +2,8 @@ import React, { useId, useState } from 'react';
 import { NewUserInput, Role } from '../../../shared/types/user';
 import { LookupOption, getDefaultLookupId } from '../../../shared/types/lookup';
 import { createUser } from '../../../server/dao/userDAO';
+import { describeRoomOption, getAssignableRooms } from '../../rooms/rooms';
+import type { Room } from '../../rooms/types';
 import {
   Button,
   Checkbox,
@@ -30,6 +32,7 @@ type NewUserModalProps = {
   schools: LookupOption[];
   studies: LookupOption[];
   lookupsLoading: boolean;
+  rooms?: Room[];
 };
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
@@ -50,6 +53,7 @@ const NewUserModal: React.FC<NewUserModalProps> = ({
   schools,
   studies,
   lookupsLoading,
+  rooms = [],
 }) => {
   const formId = useId();
   const [userData, setUserData] = useState<NewUserInput>(() =>
@@ -213,21 +217,20 @@ const NewUserModal: React.FC<NewUserModalProps> = ({
                 </Select>
               )}
             </Field>
-            <Field label="Romnummer" error={errors.roomNumber} hint="0 hvis ikke tildelt">
+            <Field label="Rom" hint="Bare rom med ledig plass kan velges.">
               {(field) => (
-                <Input
+                <Select
                   {...field}
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  value={userData.roomNumber}
-                  onChange={(e) => {
-                    const value = e.target.value === '' ? 0 : parseInt(e.target.value);
-                    update('roomNumber', value);
-                    validate('roomNumber', value);
-                  }}
-                  invalid={!!errors.roomNumber}
-                />
+                  value={String(userData.roomNumber)}
+                  onChange={(e) => update('roomNumber', parseInt(e.target.value, 10))}
+                >
+                  <option value="0">Ingen rom</option>
+                  {getAssignableRooms(rooms).map((room) => (
+                    <option key={room.id} value={room.number}>
+                      {describeRoomOption(room)}
+                    </option>
+                  ))}
+                </Select>
               )}
             </Field>
             <Field label="Ansiennitet (semestre)" error={errors.seniority}>

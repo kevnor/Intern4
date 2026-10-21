@@ -27,6 +27,7 @@ const FormSchema = z.object({
     .refine((value) => value <= today(), 'Datoen kan ikke være i fremtiden'),
   hours: z.coerce.number().positive('Må være mer enn 0'),
   type: WorkTypeSchema,
+  roomId: z.string().optional(),
   images: z.array(z.instanceof(File)).optional(),
 });
 
@@ -38,9 +39,12 @@ const emptyForm = (type = '') => ({
   date: today(),
   hours: '',
   type,
+  roomId: '',
 });
 
-type WorkLogFormProps = ReturnType<typeof useWorkLogFormWorkflow> & {
+type WorkLogFormProps = Omit<ReturnType<typeof useWorkLogFormWorkflow>, 'rooms'> & {
+  // Rooms to choose from; leave out to hide the room field.
+  rooms?: ReturnType<typeof useWorkLogFormWorkflow>['rooms'];
   onCreated?: () => void;
   // Hidden when shown in a sheet, which has its own title.
   hideHeading?: boolean;
@@ -48,6 +52,7 @@ type WorkLogFormProps = ReturnType<typeof useWorkLogFormWorkflow> & {
 
 const WorkLogForm: React.FC<WorkLogFormProps> = ({
   categories,
+  rooms = [],
   createWorkLog,
   onCreated,
   hideHeading = false,
@@ -146,6 +151,7 @@ const WorkLogForm: React.FC<WorkLogFormProps> = ({
           date: payload.date,
           hours: payload.hours,
           type: payload.type,
+          roomId: parsed.data.roomId || undefined,
         },
         files
       );
@@ -239,6 +245,25 @@ const WorkLogForm: React.FC<WorkLogFormProps> = ({
           </Select>
         )}
       </Field>
+
+      {rooms.length > 0 && (
+        <Field label="Rom (valgfritt)" hint="Velg rommet hvis arbeidet var på et bestemt rom.">
+          {(field) => (
+            <Select
+              {...field}
+              value={form.roomId}
+              onChange={(e) => setField('roomId', e.target.value)}
+            >
+              <option value="">Ikke på et bestemt rom</option>
+              {rooms.map((room) => (
+                <option key={room.id} value={room.id}>
+                  Rom {room.number}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      )}
 
       <Field label="Beskrivelse" required error={errors.description}>
         {(field) => (

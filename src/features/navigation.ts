@@ -5,6 +5,7 @@ import { helgaNavigation } from './helga/navigation';
 import { receptionNavigation } from './reception/navigation';
 import { regiNavigation } from './regi/navigation';
 import { residentNavigation } from './residents/navigation';
+import { roomNavigation } from './rooms/navigation';
 import { shiftNavigation } from './shifts/navigation';
 import { taskNavigation } from './tasks/navigation';
 import { userNavigation } from './users/navigation';
@@ -17,6 +18,7 @@ const navigationByFeature: Partial<Record<FeatureKey, FeatureNavItem[]>> = {
   reception: receptionNavigation,
   regi: regiNavigation,
   residents: residentNavigation,
+  rooms: roomNavigation,
   shifts: shiftNavigation,
   tasks: taskNavigation,
   users: userNavigation,

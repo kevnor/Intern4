@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Calendar, Clock, ImageIcon, Trash2 } from 'lucide-react';
 import { RegiLogWithId, WorkStatus } from '../../../../shared/types/regi';
 import {
+  Badge,
   Button,
   CategoryBadge,
   ConfirmDialog,
@@ -131,6 +132,11 @@ const WorkLogList: React.FC<WorkLogListProps> = ({
             </h3>
             <WorkStatusBadge status={log.status} />
           </div>
+          {log.roomNumber ? (
+            <p className="mt-1">
+              <Badge>Rom {log.roomNumber}</Badge>
+            </p>
+          ) : null}
           <dl className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted">
             <div className="flex items-center gap-1.5">
               <dt className="sr-only">Utført</dt>
@@ -177,6 +183,11 @@ const WorkLogList: React.FC<WorkLogListProps> = ({
           render: (log) => (
             <>
               <div>{log.title}</div>
+              {log.roomNumber ? (
+                <div className="mt-0.5">
+                  <Badge>Rom {log.roomNumber}</Badge>
+                </div>
+              ) : null}
               {imageCount(log) > 0 && (
                 <div className="mt-0.5 text-xs text-subtle">
                   {imageCount(log)} {imageCount(log) === 1 ? 'bilde' : 'bilder'}

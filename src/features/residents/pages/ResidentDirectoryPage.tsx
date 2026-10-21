@@ -476,6 +476,7 @@ const ResidentDirectoryPage: React.FC = () => {
             schools={lookups.schools}
             studies={lookups.studies}
             lookupsLoading={lookups.loading}
+            rooms={lookups.rooms}
           />
           <CreatedUserDialog user={createdUser} onClose={() => setCreatedUser(null)} />
           <ConfirmDialog

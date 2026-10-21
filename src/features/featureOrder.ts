@@ -2,6 +2,7 @@ export const FEATURE_ORDER = [
   'auth',
   'tasks',
   'residents',
+  'rooms',
   'shifts',
   'regi',
   'verv',
