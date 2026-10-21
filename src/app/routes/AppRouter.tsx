@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { allRoutes } from './routeConfig';
+import RouteErrorBoundary from './RouteErrorBoundary';
 import { Spinner } from '../../shared/components';
 
 // Shown while a page's code downloads, usually only on the first visit.
@@ -12,13 +13,15 @@ const PageFallback = () => (
 
 const AppRouter = () => {
   return (
-    <Suspense fallback={<PageFallback />}>
-      <Routes>
-        {allRoutes.map((route, index) => (
-          <Route key={route.path ?? index} path={route.path} element={route.element} />
-        ))}
-      </Routes>
-    </Suspense>
+    <RouteErrorBoundary>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          {allRoutes.map((route, index) => (
+            <Route key={route.path ?? index} path={route.path} element={route.element} />
+          ))}
+        </Routes>
+      </Suspense>
+    </RouteErrorBoundary>
   );
 };
 
