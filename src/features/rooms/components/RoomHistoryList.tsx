@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { residentProfilePath } from '../../residents/paths';
 import { roomPath } from '../paths';
+import { formatStay } from '../rooms';
 import type { Occupancy } from '../types';
-import { formatDate } from '../../../shared/utils/date';
 
 type RoomHistoryListProps = {
   stays: Occupancy[];
@@ -10,11 +10,6 @@ type RoomHistoryListProps = {
   subject: 'resident' | 'room';
   emptyText?: string;
 };
-
-export const formatStay = (stay: Pick<Occupancy, 'movedIn' | 'movedOut'>): string =>
-  stay.movedOut
-    ? `${formatDate(stay.movedIn)} – ${formatDate(stay.movedOut)}`
-    : `Siden ${formatDate(stay.movedIn)}`;
 
 const RoomHistoryList = ({
   stays,

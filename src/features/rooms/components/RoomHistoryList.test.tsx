@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import RoomHistoryList, { formatStay } from './RoomHistoryList';
+import RoomHistoryList from './RoomHistoryList';
+import { formatStay } from '../rooms';
 import type { Occupancy } from '../types';
 
 const stay = (overrides: Partial<Occupancy>): Occupancy => ({

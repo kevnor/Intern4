@@ -6,9 +6,6 @@ type RoomWorkListProps = {
   work: RoomWork[];
 };
 
-export const totalApprovedHours = (work: RoomWork[]): number =>
-  work.filter((entry) => entry.approved).reduce((total, entry) => total + entry.hours, 0);
-
 // Work done on a room, newest first. Work Regisjef hasn't confirmed yet is marked as waiting.
 const RoomWorkList = ({ work }: RoomWorkListProps) => {
   if (work.length === 0) {

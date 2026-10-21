@@ -1,4 +1,5 @@
-import type { Occupancy, ResidentForRoom, Room, RoomType } from './types';
+import type { Occupancy, ResidentForRoom, Room, RoomType, RoomWork } from './types';
+import { formatDate } from '../../shared/utils/date';
 
 export const ROOM_TYPES: RoomType[] = [
   'bottekott',
@@ -83,3 +84,13 @@ export const parseRoomRange = ({ from, to }: RangeInput): { from: number; to: nu
   if (end < start) return 'Til-nummeret må være likt eller høyere enn fra-nummeret.';
   return { from: start, to: end };
 };
+
+// "Siden 1.8.2025" for the current stay, "1.8.2024 – 1.6.2025" for a finished one.
+export const formatStay = (stay: Pick<Occupancy, 'movedIn' | 'movedOut'>): string =>
+  stay.movedOut
+    ? `${formatDate(stay.movedIn)} – ${formatDate(stay.movedOut)}`
+    : `Siden ${formatDate(stay.movedIn)}`;
+
+// Only work Regisjef has confirmed counts.
+export const totalApprovedHours = (work: RoomWork[]): number =>
+  work.filter((entry) => entry.approved).reduce((total, entry) => total + entry.hours, 0);

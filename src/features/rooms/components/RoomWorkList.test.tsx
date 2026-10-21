@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import RoomWorkList, { totalApprovedHours } from './RoomWorkList';
+import RoomWorkList from './RoomWorkList';
+import { totalApprovedHours } from '../rooms';
 import type { RoomWork } from '../types';
 
 const entry = (overrides: Partial<RoomWork>): RoomWork => ({
