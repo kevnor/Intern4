@@ -23,7 +23,14 @@ delete from public.work_assignments
 delete from public.work_tasks where id in (select id from public.work_items where description like '%(mock)');
 delete from public.work_misc where id in (select id from public.work_items where description like '%(mock)');
 delete from public.work_items where description like '%(mock)';
-delete from public.work_categories where description like '%(mock)';
+-- A category you have used for real work in the app is kept.
+delete from public.work_categories c
+  where c.description like '%(mock)'
+    and not exists (select 1 from public.work_items w where w.work_category_id = c.id);
+
+-- A mock romslipp points at the mock residents too (see romslipp-mock-round.sql).
+delete from public.romslipp_rounds
+  where created_by in (select id from public.users where email like '%@mock.test');
 
 update public.vakt_shifts set user_id = null;
 delete from public.vakt_swap_log;
