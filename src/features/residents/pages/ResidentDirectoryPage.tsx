@@ -114,6 +114,7 @@ const ResidentDirectoryPage: React.FC = () => {
   const [onLeaveOnly, setOnLeaveOnly] = useState(false);
   const [showNewUser, setShowNewUser] = useState(false);
   const [createdUser, setCreatedUser] = useState<CreatedUser | null>(null);
+  const [createdTitle, setCreatedTitle] = useState('Bruker opprettet');
   const [reactivateCandidate, setReactivateCandidate] = useState<ResidentDirectoryUser | null>(
     null
   );
@@ -170,8 +171,17 @@ const ResidentDirectoryPage: React.FC = () => {
     if (!reactivateCandidate) return;
     setReactivating(true);
     try {
-      await reactivateUser(reactivateCandidate.id);
+      const { initialPassword, email } = await reactivateUser(reactivateCandidate.id);
       setNotice(`${reactivateCandidate.name} er aktiv igjen.`);
+      // Only when the login had to be made again: the password is shown once.
+      if (initialPassword) {
+        setCreatedUser({
+          name: reactivateCandidate.name,
+          email: email ?? '',
+          initialPassword,
+        });
+        setCreatedTitle('Bruker reaktivert');
+      }
       void loadResidents();
     } catch (reactivateError) {
       setError(
@@ -469,6 +479,7 @@ const ResidentDirectoryPage: React.FC = () => {
             onClose={() => setShowNewUser(false)}
             onCreated={(created) => {
               setShowNewUser(false);
+              setCreatedTitle('Bruker opprettet');
               setCreatedUser(created);
               void loadResidents();
             }}
@@ -479,7 +490,11 @@ const ResidentDirectoryPage: React.FC = () => {
             lookupsLoading={lookups.loading}
             rooms={lookups.rooms}
           />
-          <CreatedUserDialog user={createdUser} onClose={() => setCreatedUser(null)} />
+          <CreatedUserDialog
+            user={createdUser}
+            title={createdTitle}
+            onClose={() => setCreatedUser(null)}
+          />
           <ConfirmDialog
             open={!!reactivateCandidate}
             title="Reaktivere beboer?"

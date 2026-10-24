@@ -289,6 +289,35 @@ describe('userDAO profile and lookup writes', () => {
     });
   });
 
+  it('returns the new temporary password when a login had to be recreated', async () => {
+    vi.mocked(supabase.functions.invoke).mockResolvedValue({
+      data: { success: true, initialPassword: 'Nytt1234Pass', email: 'kari@example.no' },
+      error: null,
+    });
+
+    await expect(reactivateUser('old-user')).resolves.toEqual({
+      initialPassword: 'Nytt1234Pass',
+      email: 'kari@example.no',
+    });
+  });
+
+  it('returns no password when the resident could sign in again as before', async () => {
+    vi.mocked(supabase.functions.invoke).mockResolvedValue({
+      data: { success: true },
+      error: null,
+    });
+    await expect(reactivateUser('old-user')).resolves.toEqual({
+      initialPassword: undefined,
+      email: undefined,
+    });
+
+    vi.mocked(supabase.functions.invoke).mockResolvedValue({ data: null, error: null });
+    await expect(reactivateUser('old-user')).resolves.toEqual({
+      initialPassword: undefined,
+      email: undefined,
+    });
+  });
+
   it('passes lookup ids to the create-user function', async () => {
     vi.mocked(supabase.functions.invoke).mockResolvedValue({
       data: { user: { id: '11111111-1111-1111-1111-111111111111' }, initialPassword: 'abc123' },

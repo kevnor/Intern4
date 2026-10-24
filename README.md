@@ -236,9 +236,20 @@ npx supabase migration up --local
 
 ### Edge functions
 
-`create-user` and `delete-user` in `supabase/functions` create and deactivate users with the
-service role. Their role rules live in `supabase/functions/_shared/userManagement.ts`. Keep it in
-sync with `roomManagementRoles` in `src/features/users/permissions.ts`.
+`create-user`, `delete-user` and `reactivate-user` in `supabase/functions` add, deactivate and
+reactivate residents with the service role. Their role rules live in
+`supabase/functions/_shared/userManagement.ts`. Keep it in sync with `roomManagementRoles` in
+`src/features/users/permissions.ts`.
+
+- **create-user** saves the profile first and then creates the login with the same id, and takes the
+  profile back if the login fails.
+- **delete-user** (deactivate) bans the login and sets `is_active = false`. The login is not deleted,
+  so the resident cannot sign in again, with a password or through Microsoft, until reactivated.
+- **reactivate-user** lifts the ban. A login that an older deactivation deleted is recreated with the
+  same id, and a new temporary password is returned to hand over.
+
+The functions are tested with an in-memory stand-in for Supabase (`supabase/functions/_testing`),
+so `npm test` covers their logic without Deno or a network.
 
 ```sh
 npx supabase functions serve   # run locally (needs the edge runtime, see Troubleshooting)
@@ -252,7 +263,7 @@ on staging first if you can:
 ```sh
 npx supabase link --project-ref <project-ref>
 npx supabase db push
-npx supabase functions deploy create-user delete-user
+npx supabase functions deploy create-user delete-user reactivate-user
 ```
 
 ## Troubleshooting

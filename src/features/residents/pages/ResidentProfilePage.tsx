@@ -23,6 +23,8 @@ import { RESIDENT_PATHS } from '../paths';
 import { formatAddress, formatRoom, formatStudy } from '../residentDirectory';
 import ContactActions from '../components/ContactActions';
 import EditResidentSheet from '../components/EditResidentSheet';
+import CreatedUserDialog from '../components/CreatedUserDialog';
+import type { CreatedUser } from '../components/NewUserModal';
 import { useResidentProfile, type ResidentProfile } from '../hooks/useResidentProfile';
 import { useUserAdminLookups } from '../hooks/useUserAdminLookups';
 import { canAccessRoomManagement } from '../../users/permissions';
@@ -83,6 +85,7 @@ const ResidentProfilePage: React.FC = () => {
   const [editing, setEditing] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [working, setWorking] = useState(false);
+  const [newLogin, setNewLogin] = useState<CreatedUser | null>(null);
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
 
   const isSelf = user?.id === id;
@@ -144,8 +147,12 @@ const ResidentProfilePage: React.FC = () => {
         await deleteUser(id);
         setMessage({ tone: 'success', text: `${profile.name} er deaktivert.` });
       } else if (pendingAction === 'reactivate') {
-        await reactivateUser(id);
+        const { initialPassword, email } = await reactivateUser(id);
         setMessage({ tone: 'success', text: `${profile.name} er aktiv igjen.` });
+        // Only when the login had to be made again: the password is shown once.
+        if (initialPassword) {
+          setNewLogin({ name: profile.name, email: email ?? profile.email, initialPassword });
+        }
       }
       await reload();
     } catch (actionError) {
@@ -182,7 +189,7 @@ const ResidentProfilePage: React.FC = () => {
     reactivate: {
       title: 'Reaktivere beboer?',
       label: 'Reaktiver',
-      body: `${profile.name} blir aktiv beboer igjen og kan logge inn med sitt gamle passord.`,
+      body: `${profile.name} blir aktiv beboer igjen og kan logge inn som før. Hvis innloggingen var slettet, får du et nytt midlertidig passord å gi videre.`,
     },
   };
 
@@ -416,6 +423,12 @@ const ResidentProfilePage: React.FC = () => {
           rooms={lookups.rooms}
         />
       )}
+
+      <CreatedUserDialog
+        user={newLogin}
+        title="Bruker reaktivert"
+        onClose={() => setNewLogin(null)}
+      />
 
       <ConfirmDialog
         open={!!pendingAction}

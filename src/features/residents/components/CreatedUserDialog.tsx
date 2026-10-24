@@ -4,10 +4,11 @@ import { Button, Modal, StatusMessage } from '../../../shared/components';
 import type { CreatedUser } from './NewUserModal';
 
 // The temporary password is only ever shown here, so it stays until the admin closes it.
-const CreatedUserDialog: React.FC<{ user: CreatedUser | null; onClose: () => void }> = ({
-  user,
-  onClose,
-}) => {
+const CreatedUserDialog: React.FC<{
+  user: CreatedUser | null;
+  onClose: () => void;
+  title?: string;
+}> = ({ user, onClose, title = 'Bruker opprettet' }) => {
   const [copied, setCopied] = useState(false);
 
   if (!user) return null;
@@ -25,7 +26,7 @@ const CreatedUserDialog: React.FC<{ user: CreatedUser | null; onClose: () => voi
     <Modal
       open
       onClose={onClose}
-      title="Bruker opprettet"
+      title={title}
       size="sm"
       closeOnBackdrop={false}
       footer={<Button onClick={onClose}>Ferdig</Button>}

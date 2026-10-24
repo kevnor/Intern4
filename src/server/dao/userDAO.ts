@@ -378,8 +378,17 @@ export async function deleteUser(userId: string): Promise<void> {
   await invokeFunction('delete-user', { userId }, 'Kunne ikke deaktivere bruker');
 }
 
-export async function reactivateUser(userId: string): Promise<void> {
-  await invokeFunction('reactivate-user', { userId }, 'Kunne ikke reaktivere bruker');
+// A resident whose login was only banned can sign in as before. One whose login had been deleted
+// (older deactivations) gets a new one, and the temporary password to hand over comes back here.
+export async function reactivateUser(
+  userId: string
+): Promise<{ initialPassword?: string; email?: string }> {
+  const result = await invokeFunction<{ initialPassword?: string; email?: string } | null>(
+    'reactivate-user',
+    { userId },
+    'Kunne ikke reaktivere bruker'
+  );
+  return { initialPassword: result?.initialPassword, email: result?.email };
 }
 
 export async function getRoles(): Promise<Role[]> {

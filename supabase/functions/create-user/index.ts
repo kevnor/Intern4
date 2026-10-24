@@ -5,12 +5,7 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+import { canManageUsers, corsHeaders, generatePassword } from '../_shared/userManagement.ts';
 
 type AddressInput = {
   street?: string;
@@ -34,13 +29,6 @@ type CreateUserInput = {
   isActive?: boolean;
   role?: string;
 };
-
-function generatePassword(length = 12): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
-}
 
 async function resolveLookupId(
   adminClient: ReturnType<typeof createClient>,
@@ -135,9 +123,7 @@ Deno.serve(async (req) => {
     return new Response('Forbidden', { status: 403, headers: corsHeaders });
   }
 
-  const allowedRoles = ['Admin', 'Data Åpmand', 'Regisjef'];
-
-  if (!allowedRoles.includes(myRole)) {
+  if (!canManageUsers(myRole)) {
     return new Response('Forbidden', { status: 403, headers: corsHeaders });
   }
 
@@ -174,22 +160,15 @@ Deno.serve(async (req) => {
   const studyLookup = await resolveLookupId(adminClient, 'studies', body.studyId);
   if (studyLookup.error) return studyLookup.error;
 
-  const { data: created, error: createErr } = await adminClient.auth.admin.createUser({
-    email: body.email,
-    password,
-    email_confirm: true,
-    user_metadata: { name: body.name },
-  });
-
-  if (createErr || !created?.user) {
-    const msg = createErr?.message ?? 'Failed to create user';
-    return new Response(msg, { status: 400, headers: corsHeaders });
-  }
-
   const address = body.address ?? {};
 
+  // The profile goes in first, with the id the login will get. The login can then only be created
+  // for someone who already has a profile (the before-user-created hook checks that), and a
+  // failure leaves nothing half-made behind.
+  const userId = crypto.randomUUID();
+
   const { error: profileErr } = await adminClient.from('users').insert({
-    id: created.user.id,
+    id: userId,
     email: body.email,
     name: body.name,
     phone: body.phone ?? null,
@@ -210,6 +189,25 @@ Deno.serve(async (req) => {
 
   if (profileErr) {
     return new Response(profileErr.message, { status: 400, headers: corsHeaders });
+  }
+
+  // A variable rather than an inline object: `id` is accepted by the auth API but is missing from
+  // some versions of the client's type.
+  const attributes = {
+    id: userId,
+    email: body.email,
+    password,
+    email_confirm: true,
+    user_metadata: { name: body.name },
+  };
+
+  const { data: created, error: createErr } = await adminClient.auth.admin.createUser(attributes);
+
+  if (createErr || !created?.user) {
+    // Take the profile back, so the email can be tried again.
+    await adminClient.from('users').delete().eq('id', userId);
+    const msg = createErr?.message ?? 'Failed to create user';
+    return new Response(msg, { status: 400, headers: corsHeaders });
   }
 
   return new Response(JSON.stringify({ user: created.user, initialPassword: password }), {
