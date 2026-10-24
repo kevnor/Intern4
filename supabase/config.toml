@@ -229,9 +229,13 @@ timebox = "12h"
 inactivity_timeout = "2h"
 
 # This hook runs before a new user is created and allows developers to reject the request based on the incoming user object.
-# [auth.hook.before_user_created]
-# enabled = true
-# uri = "pg-functions://postgres/auth/before-user-created-hook"
+# Ours only lets an account be created for someone who already has an active profile with the same
+# email (see migration 20261024100000_add_auth_gate). Off by default so that adding a test user in
+# Studio keeps working; switch it on together with the Azure provider below. On a hosted project it is
+# enabled in the dashboard (Authentication > Hooks) instead.
+[auth.hook.before_user_created]
+enabled = false
+uri = "pg-functions://postgres/public/hook_before_user_created"
 
 # This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
 # [auth.hook.custom_access_token]
@@ -285,6 +289,18 @@ url = ""
 # If enabled, the nonce check will be skipped. Required for local sign in with Google auth.
 skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
+email_optional = false
+
+# Sign in with Microsoft Entra ID (single tenant). Off by default; to try it locally, register an Azure
+# app (see the README), put the three values below in supabase/.env, set enabled = true and restart
+# `supabase start`. The tenant URL is https://login.microsoftonline.com/<tenant-id>/v2.0.
+[auth.external.azure]
+enabled = false
+client_id = "env(SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_AZURE_SECRET)"
+url = "env(SUPABASE_AUTH_EXTERNAL_AZURE_URL)"
+redirect_uri = ""
+skip_nonce_check = false
 email_optional = false
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.

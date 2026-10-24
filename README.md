@@ -98,6 +98,47 @@ npm run dev
 Open <http://localhost:5173> and log in. Emails sent locally, such as password resets, show up in
 Mailpit at <http://127.0.0.1:54324>.
 
+## Sign in with Microsoft (Entra ID)
+
+Residents sign in with their Microsoft account; email and password stays as a fallback. Only people
+Romsjef has already added can get in: the Microsoft account is matched to the resident by **email**
+(case does not matter), and anyone else is refused. Roles are still set in the app, not in Entra.
+
+### 1. Register the app in Entra
+
+In the Entra admin centre go to **App registrations → New registration**:
+
+- **Supported account types:** this organisation only (single tenant).
+- **Redirect URI (Web):** `https://<project-ref>.supabase.co/auth/v1/callback`. For local testing also
+  add `http://127.0.0.1:54321/auth/v1/callback`.
+- **Certificates & secrets:** create a client secret and copy its _value_.
+- **Token configuration → Add optional claim → ID token:** add `email` and `xms_edov`. Without
+  `xms_edov` Supabase does not treat the Microsoft email as verified, and will not link the sign-in to
+  the resident's existing account.
+- Note the **Application (client) ID** and **Directory (tenant) ID**.
+
+### 2. Configure Supabase
+
+On a hosted project: **Authentication → Providers → Azure**: enable it and enter the client ID, the
+secret and the tenant URL `https://login.microsoftonline.com/<tenant-id>/v2.0`. Then
+**Authentication → Hooks → Before User Created**: choose the Postgres function
+`public.hook_before_user_created` (created by migration `20261024100000_add_auth_gate.sql`). It only
+lets an account be created for someone with an active profile and the same email. Add your production
+site URL under **Authentication → URL Configuration**.
+
+Locally, put the values in `supabase/.env` (gitignored):
+
+```sh
+SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID=<client id>
+SUPABASE_AUTH_EXTERNAL_AZURE_SECRET=<client secret>
+SUPABASE_AUTH_EXTERNAL_AZURE_URL=https://login.microsoftonline.com/<tenant-id>/v2.0
+```
+
+set `enabled = true` under `[auth.external.azure]` (and `[auth.hook.before_user_created]`) in
+`supabase/config.toml`, and restart `npx supabase start`. With the hook on, create a test resident
+with the app's "Ny bruker" form (or the mock scripts), not with Studio's _Add user_, because the
+profile must exist before the login is created.
+
 ## Scripts
 
 | Command                | What it does                                    |
