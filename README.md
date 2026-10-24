@@ -139,6 +139,21 @@ set `enabled = true` under `[auth.external.azure]` (and `[auth.hook.before_user_
 with the app's "Ny bruker" form (or the mock scripts), not with Studio's _Add user_, because the
 profile must exist before the login is created.
 
+### Switching off email and password
+
+Email and password is a fallback while Microsoft sign-in beds in. Set `VITE_LOCAL_LOGIN_ENABLED=false`
+when building the app (in `.env.local` locally, or as a build variable where it is deployed) to hide
+the email form and "Glemt passord?", leaving only "Logg inn med Microsoft". It only hides the form: the
+residents' passwords still exist until the login policy changes.
+
+### What happens at sign-in
+
+- A resident Romsjef has added signs in with Microsoft; their Microsoft account is matched by email.
+- Someone else is refused with "Du er ikke registrert som beboer".
+- A deactivated resident is refused on both ways in ("Kontoen er deaktivert"): deactivating bans the
+  login, and the app also checks `is_active` after every sign-in.
+- People who sign in only with Microsoft see a note instead of the password form under Profil → Passord.
+
 ## Scripts
 
 | Command                | What it does                                    |

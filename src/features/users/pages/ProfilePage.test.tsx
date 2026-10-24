@@ -298,4 +298,43 @@ describe('ProfilePage', () => {
     expect(screen.getByLabelText('By')).toHaveValue('Bergen');
     expect(mockGetUser).toHaveBeenCalledTimes(1);
   });
+
+  it('explains that there is no password to change when the user signs in with Microsoft', async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: '11111111-1111-4111-8111-111111111111',
+        name: 'Johannes Aamot-Skeidsvoll',
+        email: 'johannes@singsaker.no',
+        role: 'Data',
+        providers: ['azure'],
+      },
+      loading: false,
+    });
+    renderProfile();
+
+    await user.click(await screen.findByRole('tab', { name: 'Passord' }));
+
+    expect(screen.getByText(/Du logger inn med Microsoft/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^nytt passord/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps the password form for someone who also has a password', async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: '11111111-1111-4111-8111-111111111111',
+        name: 'Johannes Aamot-Skeidsvoll',
+        email: 'johannes@singsaker.no',
+        role: 'Data',
+        providers: ['email', 'azure'],
+      },
+      loading: false,
+    });
+    renderProfile();
+
+    await user.click(await screen.findByRole('tab', { name: 'Passord' }));
+
+    expect(screen.getByLabelText(/^nytt passord/i)).toBeInTheDocument();
+  });
 });
