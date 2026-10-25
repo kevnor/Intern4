@@ -1,0 +1,23 @@
+# gitleaks configuration (secret scanning, see .github/workflows/security.yml).
+# Starts from gitleaks' built-in rules and adds what is specific to this project.
+
+[extend]
+useDefault = true
+
+# Supabase's newer secret API keys (sb_secret_...) are not covered by the built-in rules.
+[[rules]]
+id = "supabase-secret-key"
+description = "Supabase secret API key"
+regex = '''sb_secret_[A-Za-z0-9_-]{20,}'''
+keywords = ["sb_secret_"]
+
+[allowlist]
+description = "Public Supabase anon keys"
+# Each entry is a key that is public by design (it ships in every browser bundle and only grants what
+# row level security allows). Anything else that looks like a JWT, such as a service_role key, fails.
+regexes = [
+  # The standard local-demo anon key that `supabase start` prints and the docs use.
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9\.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0''',
+  # This project's hosted anon key (role: anon), found in old committed dist/ build output.
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwanNjbmlyZXRzcWtvemdvdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5NDYwMTMsImV4cCI6MjA3NjUyMjAxM30\.-0Dfq8ITuUl4Bq2HJxDGMaV_81EzzD9X-CrWLcSNwUk''',
+]
