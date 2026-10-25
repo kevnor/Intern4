@@ -298,6 +298,23 @@ describe('ResidentDirectoryPage', () => {
     expect(profileLinkNames(table)).toEqual(['Test Beboer En', 'Demo Beboer To']);
   });
 
+  it('marks a planned move-out for managers only', async () => {
+    vi.mocked(getResidentDirectoryUsers).mockResolvedValue([
+      { ...activeResidents[0], moveOutDate: '2099-06-30' },
+    ]);
+
+    asRole('Regisjef');
+    const { unmount } = renderPage('/beboere');
+    await screen.findByRole('table');
+    expect(screen.getAllByText('Flytter ut 30.06.2099').length).toBeGreaterThan(0);
+    unmount();
+
+    asRole('Halv/Halv');
+    renderPage('/beboere');
+    await screen.findByRole('table');
+    expect(screen.queryByText(/Flytter ut/)).not.toBeInTheDocument();
+  });
+
   it('keeps admin tools away from regular residents', async () => {
     vi.mocked(getResidentDirectoryUsers).mockResolvedValue(activeResidents);
     renderPage('/beboere');

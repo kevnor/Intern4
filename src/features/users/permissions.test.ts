@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { USER_ROLES } from '../../shared/types/roles';
-import { canAccessRoomManagement, canAssignRole, canAssignRoles } from './permissions';
+import {
+  canAccessRoomManagement,
+  canAssignRole,
+  canAssignRoles,
+  canManageResidents,
+} from './permissions';
 
 describe('user permissions', () => {
   it('allows existing room management roles', () => {
@@ -22,5 +27,19 @@ describe('user permissions', () => {
     expect(canAssignRole(USER_ROLES.DATA, USER_ROLES.ADMIN)).toBe(false);
     expect(canAssignRole(USER_ROLES.ADMIN, USER_ROLES.ADMIN)).toBe(true);
     expect(canAssignRole(USER_ROLES.ROOMMANAGER, USER_ROLES.HALF_HALF)).toBe(false);
+  });
+
+  it('lets the same roles manage residents as the edge functions and the database do', () => {
+    for (const role of [
+      USER_ROLES.ADMIN,
+      USER_ROLES.DATA,
+      USER_ROLES.ROOMMANAGER,
+      USER_ROLES.WORKMANAGER,
+    ]) {
+      expect(canManageResidents(role)).toBe(true);
+    }
+    for (const role of [USER_ROLES.VAKTSJEF, USER_ROLES.HALF_HALF, undefined]) {
+      expect(canManageResidents(role)).toBe(false);
+    }
   });
 });

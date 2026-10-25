@@ -147,6 +147,14 @@ when building the app (in `.env.local` locally, or as a build variable where it 
 the email form and "Glemt passord?", leaving only "Logg inn med Microsoft". It only hides the form: the
 residents' passwords still exist until the login policy changes.
 
+### Adding a resident
+
+Romsjef (or Data, Regisjef, Admin) adds the resident with **Ny bruker**, using the email of their
+Microsoft account. The dialog that follows gives a ready-made welcome message with the login link, to
+paste into mail or chat. While email and password is on, it also shows the temporary password, once;
+with `VITE_LOCAL_LOGIN_ENABLED=false` there is no password to hand over. The first Microsoft sign-in
+is linked to the profile by email.
+
 ### What happens at sign-in
 
 - A resident Romsjef has added signs in with Microsoft; their Microsoft account is matched by email.

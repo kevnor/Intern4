@@ -90,6 +90,7 @@ describe('userDAO resident directory', () => {
         'created_at',
         'is_active',
         'on_leave',
+        'move_out_date',
         'profile_picture',
         'roles(name)',
       ].join(', ')

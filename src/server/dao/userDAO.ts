@@ -38,6 +38,7 @@ type UserRow = {
   room_number?: number | null;
   on_leave?: boolean | null;
   is_active?: boolean | null;
+  move_out_date?: string | null;
   created_at?: string | Date | null;
   roles?: SupabaseJoin<RoleJoin>;
 };
@@ -158,6 +159,7 @@ function toAppUser(row: UserRow): User {
     roomNumber: row.room_number ?? 0,
     onLeave: row.on_leave ?? false,
     isActive: row.is_active ?? true,
+    moveOutDate: row.move_out_date ?? undefined,
     createdAt: row.created_at ? new Date(row.created_at) : new Date(0),
     role: getJoinedName(row.roles),
   };
@@ -288,6 +290,7 @@ function toResidentDirectoryUser(row: ResidentDirectoryUserRow): ResidentDirecto
     role: getJoinedName(row.roles) || undefined,
     onLeave: row.on_leave ?? false,
     isActive: row.is_active ?? false,
+    moveOutDate: row.move_out_date ?? undefined,
     address: {
       street: row.street ?? '',
       postalCode: row.postal_code ?? '',
@@ -331,6 +334,7 @@ export async function getResidentDirectoryUsers(
     'created_at',
     'is_active',
     'on_leave',
+    'move_out_date',
     'profile_picture',
     'roles(name)',
   ];
@@ -374,8 +378,10 @@ export async function getAllUsersWithRole(): Promise<BasicUserWithRole[]> {
   return mapBasicUsersWithRole(result as unknown as SupabaseResult<BasicUserWithRoleRow>);
 }
 
-export async function deleteUser(userId: string): Promise<void> {
-  await invokeFunction('delete-user', { userId }, 'Kunne ikke deaktivere bruker');
+// Moves the resident out right away: the room, shifts, romslipp and login are dealt with in one go
+// (see offboard_user_internal). A move-out on a later date goes through planMoveOut instead.
+export async function deleteUser(userId: string, reason?: string): Promise<void> {
+  await invokeFunction('delete-user', { userId, reason }, 'Kunne ikke flytte ut beboeren');
 }
 
 // A resident whose login was only banned can sign in as before. One whose login had been deleted
