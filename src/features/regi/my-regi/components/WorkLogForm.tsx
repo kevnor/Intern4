@@ -15,6 +15,7 @@ import {
 import { formatDateColumnValue } from '../../../../shared/utils/date';
 import { validateImageFile } from '../../../../server/storage';
 import { cn } from '../../../../shared/utils/cn';
+import { createPreviewUrl, isBlobUrl } from '../../../../shared/utils/previewUrl';
 
 const today = () => formatDateColumnValue(new Date());
 
@@ -77,7 +78,7 @@ const WorkLogForm: React.FC<WorkLogFormProps> = ({
     () =>
       files.map((file) => ({
         file,
-        url: typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : '',
+        url: createPreviewUrl(file),
       })),
     [files]
   );
@@ -320,7 +321,7 @@ const WorkLogForm: React.FC<WorkLogFormProps> = ({
                 key={getFileKey(file)}
                 className="relative aspect-square overflow-hidden rounded-xl border border-border bg-surface-muted"
               >
-                {url ? (
+                {isBlobUrl(url) ? (
                   <img src={url} alt={file.name} className="h-full w-full object-cover" />
                 ) : (
                   <span className="block truncate p-2 text-xs">{file.name}</span>
