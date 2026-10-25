@@ -40,6 +40,8 @@
     "test": "vitest run",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "security:audit": "npm audit --omit=dev --audit-level=high",
+    "security:db": "bash scripts/run-db-security-check.sh"
   }
 }
