@@ -139,7 +139,14 @@ describe('reportError and global handlers', () => {
 
     remove();
     log.mockClear();
+    // Vitest turns an error event nobody is listening for into an uncaught exception, so something
+    // else listens while the removed handler is checked.
+    const bystander = vi.fn();
+    window.addEventListener('error', bystander);
     window.dispatchEvent(new ErrorEvent('error', { error, message: 'boom' }));
+    window.removeEventListener('error', bystander);
+
+    expect(bystander).toHaveBeenCalledTimes(1);
     expect(log).not.toHaveBeenCalled();
   });
 });
