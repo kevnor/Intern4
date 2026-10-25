@@ -10,7 +10,7 @@ Functions) and Vitest with Testing Library.
 
 ### Prerequisites
 
-- Node.js 20, the version CI uses.
+- Node.js 22.12 or newer (Node 20 is end of life, and the test runner needs 22.12). `.nvmrc` has the version CI uses.
 - Docker, for running Supabase locally.
 
 ### 1. Install dependencies

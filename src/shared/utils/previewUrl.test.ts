@@ -27,7 +27,8 @@ describe('createPreviewUrl', () => {
   });
 
   it('gives no address where the browser cannot make one', () => {
-    expect(typeof URL.createObjectURL).not.toBe('function');
+    // Some environments (older browsers, test runners) have no createObjectURL.
+    URL.createObjectURL = undefined as unknown as typeof URL.createObjectURL;
 
     expect(createPreviewUrl(file)).toBe('');
   });
