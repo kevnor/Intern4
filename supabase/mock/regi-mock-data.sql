@@ -21,7 +21,10 @@ delete from public.work_assignments
 delete from public.work_tasks where id in (select id from public.work_items where description like '%(mock)');
 delete from public.work_misc where id in (select id from public.work_items where description like '%(mock)');
 delete from public.work_items where description like '%(mock)';
-delete from public.work_categories where description like '%(mock)';
+-- A category you have used for real work in the app is kept.
+delete from public.work_categories c
+  where c.description like '%(mock)'
+    and not exists (select 1 from public.work_items w where w.work_category_id = c.id);
 
 do $$
 begin
@@ -32,13 +35,18 @@ end $$;
 
 -- 2. Categories ------------------------------------------------------------------------------
 insert into public.work_categories (name, description, color)
-values
+select v.name, v.description, v.color
+from (values
   ('Kjøkken',              'Matlaging og kjøkkenvakt (mock)', '#f59e0b'),
   ('Hage og uteområder',   'Hagearbeid og måking (mock)',     '#16a34a'),
   ('Vedlikehold',          'Små reparasjoner (mock)',         '#2563eb'),
   ('Rengjøring',           'Felles områder (mock)',           '#0891b2'),
   ('Arrangement',          'Fester og dugnader (mock)',       '#9333ea'),
-  ('IT og nett',           'Nettside og wifi (mock)',         '#475569');
+  ('IT og nett',           'Nettside og wifi (mock)',         '#475569')
+) as v(name, description, color)
+where not exists (
+  select 1 from public.work_categories c where c.description = v.description
+);
 
 -- 3. Who can do regi ---------------------------------------------------------------------------
 -- Everyone but Full Vakt owes regi; Halv/Halv owe half. Full Vakt only do the odd voluntary task.

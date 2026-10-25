@@ -91,4 +91,19 @@ describe('ClaimShiftModal', () => {
 
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('shows why claiming failed, inside the dialog', () => {
+    render(
+      <ClaimShiftModal
+        shift={shift}
+        busy={false}
+        error="Vakten er ikke lenger ledig for bytte"
+        restConflict={false}
+        onClaim={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Vakten er ikke lenger ledig for bytte');
+  });
 });

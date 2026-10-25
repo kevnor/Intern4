@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import WorkLogForm from './WorkLogForm';
 import type { Category } from '../../../../shared/types/regi/tasks';
+import type { Room } from '../../../rooms/types';
 import { formatDateColumnValue } from '../../../../shared/utils/date';
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
@@ -21,9 +22,23 @@ const categories: Category[] = [
   },
 ];
 
-const renderForm = (createWorkLog = vi.fn().mockResolvedValue(undefined), onCreated = vi.fn()) => {
+const rooms: Room[] = [
+  { id: 'room-101', number: 101, type: null, capacity: 1, occupants: [] },
+  { id: 'room-214', number: 214, type: 'korrhybel', capacity: 1, occupants: [] },
+];
+
+const renderForm = (
+  createWorkLog = vi.fn().mockResolvedValue(undefined),
+  onCreated = vi.fn(),
+  roomOptions?: Room[]
+) => {
   render(
-    <WorkLogForm categories={categories} createWorkLog={createWorkLog} onCreated={onCreated} />
+    <WorkLogForm
+      categories={categories}
+      rooms={roomOptions}
+      createWorkLog={createWorkLog}
+      onCreated={onCreated}
+    />
   );
   return { createWorkLog, onCreated };
 };
@@ -105,5 +120,42 @@ describe('WorkLogForm', () => {
 
     expect(await screen.findByText('Nettverksfeil')).toBeInTheDocument();
     expect(screen.getByLabelText(/tittel/i)).toHaveValue('Rydding');
+  });
+
+  it('has no room field unless there are rooms to choose from', () => {
+    renderForm();
+
+    expect(screen.queryByLabelText(/Rom \(valgfritt\)/)).not.toBeInTheDocument();
+  });
+
+  it('can name the room the work was done on', async () => {
+    const user = userEvent.setup();
+    const { createWorkLog } = renderForm(undefined, undefined, rooms);
+
+    await user.type(screen.getByLabelText(/tittel/i), 'Malte veggen');
+    await user.type(screen.getByLabelText(/timer/i), '2');
+    await user.type(screen.getByLabelText(/beskrivelse/i), 'To strøk maling');
+    await user.selectOptions(screen.getByLabelText(/Rom \(valgfritt\)/), 'room-214');
+    await user.click(screen.getByRole('button', { name: 'Registrer timer' }));
+
+    await waitFor(() =>
+      expect(createWorkLog).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Malte veggen', roomId: 'room-214' }),
+        []
+      )
+    );
+  });
+
+  it('leaves the room out when none is chosen', async () => {
+    const user = userEvent.setup();
+    const { createWorkLog } = renderForm(undefined, undefined, rooms);
+
+    await user.type(screen.getByLabelText(/tittel/i), 'Vasket trapp');
+    await user.type(screen.getByLabelText(/timer/i), '1');
+    await user.type(screen.getByLabelText(/beskrivelse/i), 'Hele oppgangen');
+    await user.click(screen.getByRole('button', { name: 'Registrer timer' }));
+
+    await waitFor(() => expect(createWorkLog).toHaveBeenCalled());
+    expect(vi.mocked(createWorkLog).mock.calls[0][0].roomId).toBeUndefined();
   });
 });

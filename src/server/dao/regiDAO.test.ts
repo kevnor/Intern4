@@ -354,6 +354,52 @@ describe('regiDAO', () => {
     });
   });
 
+  it('stores the room on the work item when the work was done on a room', async () => {
+    const categoryBuilder = createMaybeSingleBuilder({ id: 7 });
+    const workItemBuilder = createInsertSingleBuilder({ id: 44 });
+    const assignmentBuilder = createInsertSingleBuilder({ id: 12 });
+
+    vi.mocked(supabase.from)
+      .mockImplementationOnce(() => categoryBuilder)
+      .mockImplementationOnce(() => workItemBuilder)
+      .mockImplementationOnce(() => assignmentBuilder);
+
+    await addRegiLog({
+      userId: '11111111-1111-1111-1111-111111111111',
+      title: 'Malte veggen',
+      description: 'To strøk',
+      date: new Date('2026-04-21T00:00:00.000Z'),
+      hours: 2,
+      type: 'Regi',
+      roomId: 'room-214',
+    });
+
+    expect(workItemBuilder.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'misc', room_id: 'room-214' })
+    );
+  });
+
+  it('leaves the room empty when the work was not on a room', async () => {
+    const categoryBuilder = createMaybeSingleBuilder({ id: 7 });
+    const workItemBuilder = createInsertSingleBuilder({ id: 44 });
+    const assignmentBuilder = createInsertSingleBuilder({ id: 12 });
+
+    vi.mocked(supabase.from)
+      .mockImplementationOnce(() => categoryBuilder)
+      .mockImplementationOnce(() => workItemBuilder)
+      .mockImplementationOnce(() => assignmentBuilder);
+
+    await addRegiLog({
+      userId: '11111111-1111-1111-1111-111111111111',
+      title: 'Vasket trapp',
+      date: new Date('2026-04-21T00:00:00.000Z'),
+      hours: 1,
+      type: 'Regi',
+    });
+
+    expect(workItemBuilder.insert).toHaveBeenCalledWith(expect.objectContaining({ room_id: null }));
+  });
+
   it('auto-approves granted regi logs with approver metadata', async () => {
     const categoryBuilder = createMaybeSingleBuilder({ id: 7 });
     const workItemBuilder = createInsertSingleBuilder({ id: 44 });

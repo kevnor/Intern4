@@ -1,5 +1,8 @@
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
+import { DEACTIVATED_MESSAGE, MICROSOFT_FAILED_MESSAGE } from '../../features/auth/authErrors';
+import { AUTH_PATHS } from '../../features/auth/paths';
+import { getErrorMessage } from '../../shared/utils/errors';
 
 export type LoginResult =
   | { success: true; user: User; session: Session }
@@ -11,13 +14,17 @@ export async function logIn(email: string, password: string): Promise<LoginResul
 
     // Deactivated users have a banned login (see the delete-user edge function).
     if (error?.message?.toLowerCase().includes('banned')) {
-      return { success: false, error: 'Kontoen er deaktivert. Kontakt romsjef eller Data.' };
+      return { success: false, error: DEACTIVATED_MESSAGE };
+    }
+
+    if (error?.message?.toLowerCase().includes('invalid login credentials')) {
+      return { success: false, error: 'Feil e-post eller passord.' };
     }
 
     if (error || !data.user || !data.session) {
       return {
         success: false,
-        error: 'Innlogging feilet: ' + (error?.message ?? 'ukjent feil'),
+        error: 'Innlogging feilet: ' + getErrorMessage(error, 'ukjent feil'),
       };
     }
 
@@ -26,6 +33,28 @@ export async function logIn(email: string, password: string): Promise<LoginResul
     const message =
       e instanceof Error ? e.message : 'NetworkError when attempting to fetch resource';
     return { success: false, error: 'Innlogging feilet: ' + message };
+  }
+}
+
+export type MicrosoftLoginResult = { success: true } | { success: false; error: string };
+
+// Sends the browser to Microsoft and back to the login page, where the session (or an error in the
+// address) is picked up. Only residents Romsjef has added get in: that is decided on the server.
+export async function signInWithMicrosoft(): Promise<MicrosoftLoginResult> {
+  try {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: {
+        redirectTo: `${window.location.origin}${AUTH_PATHS.LOGIN}`,
+        scopes: 'email',
+      },
+    });
+    if (error) {
+      return { success: false, error: getErrorMessage(error, MICROSOFT_FAILED_MESSAGE) };
+    }
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: getErrorMessage(e, MICROSOFT_FAILED_MESSAGE) };
   }
 }
 

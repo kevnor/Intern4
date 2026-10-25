@@ -25,7 +25,7 @@ type PlanTabProps = {
   // ask for a swap on their own or take one that is up for swap.
   onSelectShift?: (shift: Shift) => void;
   canSelect?: (shift: Shift) => boolean;
-  onCreateSlots: () => Promise<void>;
+  onCreateSlots: () => Promise<boolean>;
   now?: Date;
 };
 

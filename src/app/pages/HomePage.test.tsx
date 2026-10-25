@@ -7,6 +7,7 @@ import type { Task } from '../../shared/types/regi/tasks';
 import { getPendingRegiApprovals, getRegiLogsByUser } from '../../server/dao/regiDAO';
 import { getTasks } from '../../server/dao/tasksDAO';
 import { getCompletedShiftCounts } from '../../server/dao/vaktHoursDAO';
+import { getRomslippTurn } from '../../server/dao/romslippDAO';
 
 const ME = '11111111-1111-4111-8111-111111111111';
 const mockUseAuth = vi.fn();
@@ -127,5 +128,25 @@ describe('HomePage', () => {
 
     await screen.findByText('44 t igjen');
     expect(screen.queryByRole('meter', { name: 'Vakttimer av kravet' })).not.toBeInTheDocument();
+  });
+
+  it('tells a resident when it is their turn in the romslipp', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: ME, name: 'Rune Regi', role: 'Full Regi' } });
+    vi.mocked(getRomslippTurn).mockResolvedValueOnce({ roundId: 'round', userId: ME });
+    renderHome();
+
+    expect(await screen.findByRole('link', { name: /din tur i romslippet/i })).toHaveAttribute(
+      'href',
+      '/rom/romslipp'
+    );
+  });
+
+  it('does not nudge when it is somebody else’s turn', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: ME, name: 'Rune Regi', role: 'Full Regi' } });
+    vi.mocked(getRomslippTurn).mockResolvedValueOnce({ roundId: 'round', userId: 'someone-else' });
+    renderHome();
+
+    await screen.findByText('44 t igjen');
+    expect(screen.queryByRole('link', { name: /romslippet/i })).not.toBeInTheDocument();
   });
 });

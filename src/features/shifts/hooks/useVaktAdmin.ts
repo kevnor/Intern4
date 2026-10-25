@@ -11,6 +11,7 @@ import type { BasicUserWithRole } from '../../../shared/types/user';
 import { assignShifts, type AssignmentResult } from '../assign';
 import type { Shift, Unavailability } from '../types';
 import { getSchedulableResidents, getTargetShifts } from '../vaktTargets';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 export type ResidentRow = {
   id: string;
@@ -53,7 +54,7 @@ export const useVaktAdmin = ({ enabled, shifts, from, to, totalHours, reload }: 
       })
       .catch((loadError) => {
         console.error(loadError);
-        if (!cancelled) setError('Kunne ikke laste beboerne.');
+        if (!cancelled) setError(getErrorMessage(loadError, 'Kunne ikke laste beboerne.'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -73,7 +74,7 @@ export const useVaktAdmin = ({ enabled, shifts, from, to, totalHours, reload }: 
         return true;
       } catch (actionError) {
         console.error(actionError);
-        setError(failure);
+        setError(getErrorMessage(actionError, failure));
         return false;
       } finally {
         setBusy(false);
@@ -165,6 +166,7 @@ export const useVaktAdmin = ({ enabled, shifts, from, to, totalHours, reload }: 
     loading,
     busy,
     error,
+    clearError: () => setError(null),
     lastRun,
     autoAssign,
     clearDrafts,

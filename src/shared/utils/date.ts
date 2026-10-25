@@ -63,6 +63,12 @@ export const formatDateColumnValue = (date: Date): string => {
   return `${parts.year}-${parts.month}-${parts.day}`;
 };
 
+// 'YYYY-MM-DD' from a date column as that calendar day in local time (not shifted through UTC).
+export const parseDateColumnValue = (value: string): Date => {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 // "2,5 t" – Norwegian decimal comma, at most two decimals.
 export const formatHours = (hours: number): string =>
   `${hours.toLocaleString('no-NO', { maximumFractionDigits: 2 })} t`;

@@ -92,4 +92,19 @@ describe('SwapRequestModal', () => {
 
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('shows why the request failed, inside the dialog', () => {
+    render(
+      <SwapRequestModal
+        shift={shift}
+        busy={false}
+        error="Vakten er ikke lenger ledig for bytte"
+        onRequest={vi.fn()}
+        onCancelSwap={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Vakten er ikke lenger ledig for bytte');
+  });
 });

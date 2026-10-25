@@ -121,4 +121,15 @@ describe('PlanTab', () => {
 
     expect(onSelectShift).toHaveBeenCalledWith(own);
   });
+
+  it('keeps the button usable when creating the slots fails', async () => {
+    const user = userEvent.setup();
+    const onCreateSlots = vi.fn().mockResolvedValue(false);
+    renderPlan([], true, onCreateSlots);
+
+    await user.click(screen.getByRole('button', { name: 'Opprett vakter for semesteret' }));
+
+    expect(onCreateSlots).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Opprett vakter for semesteret' })).toBeEnabled();
+  });
 });

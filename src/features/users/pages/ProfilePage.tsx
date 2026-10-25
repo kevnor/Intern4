@@ -107,6 +107,8 @@ const formatDateForInput = (value: unknown): string => {
 
 const ProfilePage: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
+  // Unknown (no list of providers) counts as having a password, as before.
+  const hasPassword = !user?.providers || user.providers.includes('email');
   const [profileLoading, setProfileLoading] = useState(true);
   const [form, setForm] = useState<GeneralInfoFormState>(emptyGeneralInfoForm());
   const [formError, setFormError] = useState<string | null>(null);
@@ -585,7 +587,16 @@ const ProfilePage: React.FC = () => {
         </Card>
       )}
 
-      {activeTab === 'passord' && (
+      {activeTab === 'passord' && !hasPassword && (
+        <Card title="Passord">
+          <p className="max-w-md text-sm text-muted">
+            Du logger inn med Microsoft, så du har ikke et passord her. Passordet endrer du hos
+            Microsoft.
+          </p>
+        </Card>
+      )}
+
+      {activeTab === 'passord' && hasPassword && (
         <Card title="Endre passord" description="Bytt passordet du bruker for å logge inn.">
           <form className="max-w-md space-y-4" onSubmit={handlePasswordSubmit} noValidate>
             <Field label="Nytt passord" required hint="Minst 6 tegn.">

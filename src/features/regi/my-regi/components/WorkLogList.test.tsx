@@ -56,6 +56,20 @@ describe('WorkLogList', () => {
     vi.clearAllMocks();
   });
 
+  it('shows which room the work was done on', async () => {
+    getRegiLogsByUser.mockResolvedValue([
+      createLog({ id: 'on-room', title: 'Malte veggen', roomNumber: 214 }),
+      createLog({ id: 'general', title: 'Vasket trapp' }),
+    ]);
+
+    render(<ConnectedList />);
+
+    await screen.findAllByText('Malte veggen');
+    // Both the phone cards and the desktop table are in the DOM; the badge is in both.
+    expect(screen.getAllByText('Rom 214').length).toBeGreaterThan(0);
+    expect(within(table()).getAllByText(/^Rom \d+$/)).toHaveLength(1);
+  });
+
   it('opens the details modal when clicking a log row and shows reviewer comment', async () => {
     getRegiLogsByUser.mockResolvedValue([
       createLog({

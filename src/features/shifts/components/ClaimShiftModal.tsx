@@ -7,12 +7,20 @@ import type { Shift } from '../types';
 type ClaimShiftModalProps = {
   shift: Shift;
   busy: boolean;
+  error?: string | null;
   restConflict: boolean;
   onClaim: (shiftId: string) => Promise<boolean>;
   onClose: () => void;
 };
 
-const ClaimShiftModal = ({ shift, busy, restConflict, onClaim, onClose }: ClaimShiftModalProps) => {
+const ClaimShiftModal = ({
+  shift,
+  busy,
+  error,
+  restConflict,
+  onClaim,
+  onClose,
+}: ClaimShiftModalProps) => {
   const handleClaim = async () => {
     if (await onClaim(shift.id)) onClose();
   };
@@ -36,6 +44,7 @@ const ClaimShiftModal = ({ shift, busy, restConflict, onClaim, onClose }: ClaimS
       }
     >
       <div className="space-y-3">
+        {error && <StatusMessage tone="error">{error}</StatusMessage>}
         <dl className="space-y-1 text-sm">
           <div className="flex justify-between gap-3">
             <dt className="text-muted">Nåværende vakt</dt>

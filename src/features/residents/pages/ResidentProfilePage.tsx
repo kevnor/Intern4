@@ -23,6 +23,8 @@ import { RESIDENT_PATHS } from '../paths';
 import { formatAddress, formatRoom, formatStudy } from '../residentDirectory';
 import ContactActions from '../components/ContactActions';
 import EditResidentSheet from '../components/EditResidentSheet';
+import CreatedUserDialog from '../components/CreatedUserDialog';
+import type { CreatedUser } from '../components/NewUserModal';
 import { useResidentProfile, type ResidentProfile } from '../hooks/useResidentProfile';
 import { useUserAdminLookups } from '../hooks/useUserAdminLookups';
 import { canAccessRoomManagement } from '../../users/permissions';
@@ -32,6 +34,8 @@ import { REGI_PATHS } from '../../regi/paths';
 import { summarizeSemesterRegi } from '../../regi/regiSummary';
 import { useSemesterHours } from '../../regi/hooks/useSemesterHours';
 import { useVaktHours } from '../../shifts/hooks/useVaktHours';
+import { useUserRoomHistory } from '../../rooms/hooks/useOccupancyHistory';
+import RoomHistoryList from '../../rooms/components/RoomHistoryList';
 import { hasVakt } from '../../shifts/vaktSummary';
 
 const ageFrom = (birthDate?: Date) => {
@@ -81,10 +85,12 @@ const ResidentProfilePage: React.FC = () => {
   const [editing, setEditing] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [working, setWorking] = useState(false);
+  const [newLogin, setNewLogin] = useState<CreatedUser | null>(null);
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
 
   const isSelf = user?.id === id;
   const { totalHours } = useSemesterHours();
+  const roomHistory = useUserRoomHistory(id || undefined);
   const { summary: vakt } = useVaktHours(id || undefined, profile?.role, totalHours);
   const summary = useMemo(
     () => (profile ? summarizeSemesterRegi(logs, profile.role, new Date(), totalHours) : null),
@@ -141,8 +147,12 @@ const ResidentProfilePage: React.FC = () => {
         await deleteUser(id);
         setMessage({ tone: 'success', text: `${profile.name} er deaktivert.` });
       } else if (pendingAction === 'reactivate') {
-        await reactivateUser(id);
+        const { initialPassword, email } = await reactivateUser(id);
         setMessage({ tone: 'success', text: `${profile.name} er aktiv igjen.` });
+        // Only when the login had to be made again: the password is shown once.
+        if (initialPassword) {
+          setNewLogin({ name: profile.name, email: email ?? profile.email, initialPassword });
+        }
       }
       await reload();
     } catch (actionError) {
@@ -179,7 +189,7 @@ const ResidentProfilePage: React.FC = () => {
     reactivate: {
       title: 'Reaktivere beboer?',
       label: 'Reaktiver',
-      body: `${profile.name} blir aktiv beboer igjen og kan logge inn med sitt gamle passord.`,
+      body: `${profile.name} blir aktiv beboer igjen og kan logge inn som før. Hvis innloggingen var slettet, får du et nytt midlertidig passord å gi videre.`,
     },
   };
 
@@ -244,6 +254,20 @@ const ResidentProfilePage: React.FC = () => {
             { label: 'E-post', value: profile.email || '–' },
           ]}
         />
+      </Card>
+
+      <Card title="Romhistorikk" description="Rommene beboeren har bodd i.">
+        {roomHistory.loading ? (
+          <Skeleton className="h-16" />
+        ) : roomHistory.error ? (
+          <p className="text-sm text-danger">{roomHistory.error}</p>
+        ) : (
+          <RoomHistoryList
+            stays={roomHistory.stays}
+            subject="room"
+            emptyText="Ingen rom registrert."
+          />
+        )}
       </Card>
 
       {showAdmin && (
@@ -396,8 +420,15 @@ const ResidentProfilePage: React.FC = () => {
           roles={lookups.roles}
           schools={lookups.schools}
           studies={lookups.studies}
+          rooms={lookups.rooms}
         />
       )}
+
+      <CreatedUserDialog
+        user={newLogin}
+        title="Bruker reaktivert"
+        onClose={() => setNewLogin(null)}
+      />
 
       <ConfirmDialog
         open={!!pendingAction}

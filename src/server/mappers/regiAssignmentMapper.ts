@@ -24,6 +24,7 @@ export type RegiWorkItemRelation =
       type?: string | null;
       work_categories?: { name?: string | null } | null;
       work_misc?: WorkMiscRelation;
+      rooms?: { number?: number | null } | Array<{ number?: number | null }> | null;
     }
   | null
   | undefined;
@@ -96,6 +97,11 @@ export function isCountableRegiAssignment(row: RegiAssignmentRow): boolean {
   return false;
 }
 
+function getRoomNumber(workItems: RegiWorkItemRelation): number | undefined {
+  const room = Array.isArray(workItems?.rooms) ? workItems?.rooms[0] : workItems?.rooms;
+  return room?.number ?? undefined;
+}
+
 function getStatus(row: RegiAssignmentRow): WorkStatus {
   return statusByApprovedState[row.approved_state ?? 0] ?? 'pending';
 }
@@ -119,6 +125,7 @@ function getBaseProjection(row: RegiAssignmentRow) {
     date: toDate(row.performed_at ?? row.created_at),
     createdAt: toDate(row.created_at),
     imagePaths: getImagePaths(row.work_items),
+    roomNumber: getRoomNumber(row.work_items),
   };
 }
 

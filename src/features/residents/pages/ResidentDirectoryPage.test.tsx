@@ -346,11 +346,34 @@ describe('ResidentDirectoryPage', () => {
     expect(getResidentDirectoryUsers).toHaveBeenCalledTimes(2);
   });
 
+  it('shows the new temporary password when a former resident’s login was recreated', async () => {
+    const user = userEvent.setup();
+    asRole('Romsjef');
+    vi.mocked(getResidentDirectoryUsers).mockResolvedValue(oldResidents);
+    vi.mocked(reactivateUser).mockResolvedValue({
+      initialPassword: 'Nytt1234Pass',
+      email: 'tidligere@example.no',
+    });
+    renderPage('/beboere/gamle');
+
+    const table = await screen.findByRole('table');
+    await user.click(within(table).getByRole('button', { name: 'Reaktiver Tidligere Testperson' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Reaktivere beboer?' })).getByRole('button', {
+        name: 'Reaktiver',
+      })
+    );
+
+    const dialog = await screen.findByRole('dialog', { name: 'Bruker reaktivert' });
+    expect(within(dialog).getByLabelText('Midlertidig passord')).toHaveTextContent('Nytt1234Pass');
+    expect(within(dialog).getByText('tidligere@example.no')).toBeInTheDocument();
+  });
+
   it('lets room managers reactivate former residents', async () => {
     const user = userEvent.setup();
     asRole('Romsjef');
     vi.mocked(getResidentDirectoryUsers).mockResolvedValue(oldResidents);
-    vi.mocked(reactivateUser).mockResolvedValue(undefined);
+    vi.mocked(reactivateUser).mockResolvedValue({});
     renderPage('/beboere/gamle');
 
     const table = await screen.findByRole('table');

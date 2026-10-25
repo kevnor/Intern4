@@ -7,6 +7,7 @@ import {
   setSwapPaid,
 } from '../../../server/dao/shiftsDAO';
 import type { SwapLogEntry } from '../types';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 // Swap requests, claims and the history of swaps the signed-in resident was part of.
 // `reloadShifts` refreshes the schedule after anything that changes who has a shift.
@@ -22,7 +23,7 @@ export const useSwaps = (userId: string, reloadShifts: () => Promise<void>) => {
       setLog(entries.filter((entry) => entry.fromUserId === userId || entry.toUserId === userId));
     } catch (loadError) {
       console.error(loadError);
-      setError('Kunne ikke laste bytter.');
+      setError(getErrorMessage(loadError, 'Kunne ikke laste bytter.'));
     }
   }, [userId]);
 
@@ -41,7 +42,7 @@ export const useSwaps = (userId: string, reloadShifts: () => Promise<void>) => {
         return true;
       } catch (actionError) {
         console.error(actionError);
-        setError(failure);
+        setError(getErrorMessage(actionError, failure));
         // The shift may have been taken or changed in the meantime.
         await reloadShifts().catch(() => undefined);
         return false;

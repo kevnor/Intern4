@@ -44,6 +44,7 @@ export const TaskCreationDataSchema = z.object({
   deadline: z.date().optional(),
   hourEstimate: z.number().positive(),
   maxParticipants: z.number().int().positive(),
+  roomId: z.string().uuid().optional(),
 });
 
 export const TaskUpdateSchema = TaskCreationDataSchema.partial().extend({

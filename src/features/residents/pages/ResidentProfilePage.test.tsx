@@ -117,7 +117,7 @@ describe('ResidentProfilePage', () => {
     const user = userEvent.setup();
     asRole('Romsjef');
     vi.mocked(getUser).mockResolvedValue({ ...profile, isActive: false });
-    vi.mocked(reactivateUser).mockResolvedValue(undefined);
+    vi.mocked(reactivateUser).mockResolvedValue({});
     renderProfile();
 
     expect(await screen.findByText('Tidligere beboer')).toBeInTheDocument();
@@ -129,6 +129,24 @@ describe('ResidentProfilePage', () => {
       })
     );
     await waitFor(() => expect(reactivateUser).toHaveBeenCalledWith(RESIDENT_ID));
+  });
+
+  it('shows the new temporary password when the login had to be made again', async () => {
+    const user = userEvent.setup();
+    asRole('Romsjef');
+    vi.mocked(getUser).mockResolvedValue({ ...profile, isActive: false });
+    vi.mocked(reactivateUser).mockResolvedValue({ initialPassword: 'Nytt1234Pass' });
+    renderProfile();
+
+    await user.click(await screen.findByRole('button', { name: 'Reaktiver' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Reaktivere beboer?' })).getByRole('button', {
+        name: 'Reaktiver',
+      })
+    );
+
+    const dialog = await screen.findByRole('dialog', { name: 'Bruker reaktivert' });
+    expect(within(dialog).getByLabelText('Midlertidig passord')).toHaveTextContent('Nytt1234Pass');
   });
 
   it('does not offer to deactivate an admin', async () => {

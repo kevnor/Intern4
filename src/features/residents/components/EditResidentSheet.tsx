@@ -1,5 +1,8 @@
 import React, { useId, useState } from 'react';
 import { updateUser } from '../../../server/dao/userDAO';
+import { assignResidentToRoom } from '../../../server/dao/roomsDAO';
+import { formatRoomType, getFreeSpots } from '../../rooms/rooms';
+import type { Room } from '../../rooms/types';
 import { Role } from '../../../shared/types/user';
 import { LookupOption } from '../../../shared/types/lookup';
 import {
@@ -16,6 +19,7 @@ import { normalizePhoneNumber, validatePhoneNumber } from '../../../shared/utils
 import { validateUserField } from '../../users/userLifecycle';
 import { canAssignRole, canAssignRoles } from '../../users/permissions';
 import type { ResidentProfile } from '../hooks/useResidentProfile';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 type EditResidentSheetProps = {
   open: boolean;
@@ -27,13 +31,14 @@ type EditResidentSheetProps = {
   roles: Role[];
   schools: LookupOption[];
   studies: LookupOption[];
+  rooms?: Room[];
 };
 
-const toFormState = (resident: ResidentProfile) => ({
+const toFormState = (resident: ResidentProfile, rooms: Room[]) => ({
   name: resident.name,
   phone: resident.phone ?? '',
   birthDate: resident.birthDate ? formatDateColumnValue(resident.birthDate) : '',
-  roomNumber: String(resident.roomNumber ?? 0),
+  roomId: rooms.find((room) => room.number === resident.roomNumber)?.id ?? '',
   seniority: String(resident.seniority ?? 0),
   schoolId: resident.schoolId ?? '',
   studyId: resident.studyId ?? '',
@@ -51,9 +56,10 @@ const EditResidentSheet: React.FC<EditResidentSheetProps> = ({
   roles,
   schools,
   studies,
+  rooms = [],
 }) => {
   const formId = useId();
-  const [form, setForm] = useState(() => toFormState(resident));
+  const [form, setForm] = useState(() => toFormState(resident, rooms));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -66,6 +72,8 @@ const EditResidentSheet: React.FC<EditResidentSheetProps> = ({
   // An Admin's role can only be changed by another Admin.
   const roleLocked = !canAssignRole(callerRole, resident.role);
 
+  const currentRoomId = rooms.find((room) => room.number === resident.roomNumber)?.id ?? '';
+
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
     setErrors((current) => ({ ...current, [key]: '' }));
@@ -75,12 +83,10 @@ const EditResidentSheet: React.FC<EditResidentSheetProps> = ({
     event.preventDefault();
     setSaveError(null);
 
-    const roomNumber = form.roomNumber === '' ? 0 : parseInt(form.roomNumber);
     const seniority = form.seniority === '' ? 0 : parseInt(form.seniority);
     const phone = normalizePhoneNumber(form.phone);
     const nextErrors: Record<string, string> = {
       ...(form.name.trim() ? {} : { name: 'Navn kan ikke være tomt' }),
-      ...validateUserField('roomNumber', roomNumber),
       ...validateUserField('seniority', seniority),
       ...(validatePhoneNumber(phone) ? { phone: validatePhoneNumber(phone)! } : {}),
     };
@@ -92,12 +98,15 @@ const EditResidentSheet: React.FC<EditResidentSheetProps> = ({
     const roleChanged = showRole && form.role !== resident.role;
     setSaving(true);
     try {
+      // The room first: it is the part most likely to be refused (a full room).
+      if (form.roomId !== currentRoomId) {
+        await assignResidentToRoom(resident.id, form.roomId || null);
+      }
       await updateUser(resident.id, {
         name: form.name.trim(),
         phone,
         // Noon keeps the chosen calendar day regardless of time zone.
         birthDate: form.birthDate ? new Date(`${form.birthDate}T12:00:00`) : undefined,
-        roomNumber,
         seniority,
         schoolId: form.schoolId || undefined,
         studyId: form.studyId || undefined,
@@ -106,7 +115,7 @@ const EditResidentSheet: React.FC<EditResidentSheetProps> = ({
       });
       onSaved();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Kunne ikke lagre endringene.');
+      setSaveError(getErrorMessage(error, 'Kunne ikke lagre endringene.'));
     } finally {
       setSaving(false);
     }
@@ -172,17 +181,26 @@ const EditResidentSheet: React.FC<EditResidentSheetProps> = ({
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Romnummer" error={errors.roomNumber} hint="0 hvis ikke tildelt">
+          <Field label="Rom" hint="Rommet endres fra i dag. Tidligere rom blir med i historikken.">
             {(field) => (
-              <Input
+              <Select
                 {...field}
-                type="number"
-                inputMode="numeric"
-                min="0"
-                value={form.roomNumber}
-                onChange={(e) => set('roomNumber', e.target.value)}
-                invalid={!!errors.roomNumber}
-              />
+                value={form.roomId}
+                onChange={(e) => set('roomId', e.target.value)}
+              >
+                <option value="">Ingen rom</option>
+                {rooms.map((room) => (
+                  <option
+                    key={room.id}
+                    value={room.id}
+                    // A room that is full can't be picked, except the one they already have.
+                    disabled={getFreeSpots(room) === 0 && room.id !== currentRoomId}
+                  >
+                    {room.number} · {formatRoomType(room.type)}
+                    {getFreeSpots(room) === 0 && room.id !== currentRoomId ? ' · full' : ''}
+                  </option>
+                ))}
+              </Select>
             )}
           </Field>
           <Field label="Ansiennitet (semestre)" error={errors.seniority}>

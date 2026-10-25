@@ -5,6 +5,7 @@ import { helgaFeature } from './helga';
 import { receptionFeature } from './reception';
 import { regiFeature } from './regi';
 import { residentFeature } from './residents';
+import { roomFeature } from './rooms';
 import { shiftFeature } from './shifts';
 import { taskFeature } from './tasks';
 import { userFeature } from './users';
@@ -19,6 +20,7 @@ const featuresByKey: Record<FeatureKey, FeatureDefinition> = {
   reception: receptionFeature,
   regi: regiFeature,
   residents: residentFeature,
+  rooms: roomFeature,
   shifts: shiftFeature,
   tasks: taskFeature,
   users: userFeature,

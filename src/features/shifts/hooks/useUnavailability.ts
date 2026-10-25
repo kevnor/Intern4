@@ -5,6 +5,7 @@ import {
   getUnavailability,
 } from '../../../server/dao/unavailabilityDAO';
 import type { Unavailability } from '../types';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 // The signed-in resident's own unavailable periods in the semester.
 export const useUnavailability = (userId: string, from: Date, to: Date) => {
@@ -20,7 +21,7 @@ export const useUnavailability = (userId: string, from: Date, to: Date) => {
       setPeriods(loaded.filter((period) => period.userId === userId));
     } catch (loadError) {
       console.error(loadError);
-      setError('Kunne ikke laste utilgjengelige dager.');
+      setError(getErrorMessage(loadError, 'Kunne ikke laste utilgjengelige dager.'));
     } finally {
       setLoading(false);
     }
@@ -39,7 +40,7 @@ export const useUnavailability = (userId: string, from: Date, to: Date) => {
         return true;
       } catch (addError) {
         console.error(addError);
-        setError('Kunne ikke lagre perioden.');
+        setError(getErrorMessage(addError, 'Kunne ikke lagre perioden.'));
         return false;
       }
     },
@@ -54,7 +55,7 @@ export const useUnavailability = (userId: string, from: Date, to: Date) => {
         await load();
       } catch (removeError) {
         console.error(removeError);
-        setError('Kunne ikke slette perioden.');
+        setError(getErrorMessage(removeError, 'Kunne ikke slette perioden.'));
       }
     },
     [load]

@@ -1,12 +1,16 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  BAN_DURATION,
+  canManageUsers,
+  corsHeaders,
+  isNotFoundError,
+  jsonResponse,
+  textResponse,
+} from '../_shared/userManagement.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
+// Deactivates a resident. Their login is banned rather than deleted, so they cannot sign in again
+// (with a password or through Microsoft) until they are reactivated, and the history stays intact.
 Deno.serve(
   async (req: {
     method: string;
@@ -18,7 +22,7 @@ Deno.serve(
     }
 
     if (req.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+      return textResponse('Method not allowed', 405);
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -33,7 +37,7 @@ Deno.serve(
 
     const { data: me, error: meErr } = await userClient.auth.getUser();
     if (meErr || !me?.user) {
-      return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+      return textResponse('Unauthorized', 401);
     }
 
     const { data: roleRow, error: roleErr } = await userClient
@@ -43,28 +47,27 @@ Deno.serve(
       .maybeSingle();
 
     if (roleErr) {
-      return new Response('Unable to verify role', { status: 500, headers: corsHeaders });
+      return textResponse('Unable to verify role', 500);
     }
 
     const myRole = roleRow?.roles?.name as string | undefined;
-    const allowedRoles = ['Admin', 'Data Åpmand', 'Regisjef'];
 
-    if (!myRole || !allowedRoles.includes(myRole)) {
-      return new Response('Forbidden', { status: 403, headers: corsHeaders });
+    if (!canManageUsers(myRole)) {
+      return textResponse('Forbidden', 403);
     }
 
     const body = (await req.json().catch(() => null)) as { userId: string } | null;
     if (!body?.userId) {
-      return new Response('Bad Request: userId required', { status: 400, headers: corsHeaders });
+      return textResponse('Bad Request: userId required', 400);
     }
 
     if (body.userId === me.user.id) {
-      return new Response('Kan ikke slette din egen bruker', { status: 400, headers: corsHeaders });
+      return textResponse('Kan ikke deaktivere din egen bruker', 400);
     }
 
     const adminClient = createClient(supabaseUrl, serviceKey);
 
-    // Prevent deletion of admin users
+    // Prevent deactivation of admin users
     const { data: targetRole } = await adminClient
       .from('users')
       .select('roles(name)')
@@ -73,14 +76,16 @@ Deno.serve(
 
     const targetRoleName = (targetRole?.roles as { name?: string } | null | undefined)?.name;
     if (targetRoleName === 'Admin') {
-      return new Response('Kan ikke slette admin-brukere', { status: 403, headers: corsHeaders });
+      return textResponse('Kan ikke deaktivere admin-brukere', 403);
     }
 
-    // Delete auth user first; ignore "not found" since user may only exist in the users table
-    const { error: authErr } = await adminClient.auth.admin.deleteUser(body.userId);
+    // Ban the login. Older residents may have no login at all (it used to be deleted), which is fine.
+    const { error: banErr } = await adminClient.auth.admin.updateUserById(body.userId, {
+      ban_duration: BAN_DURATION,
+    });
 
-    if (authErr && !authErr.message.toLowerCase().includes('not found')) {
-      return new Response(authErr.message, { status: 400, headers: corsHeaders });
+    if (banErr && !isNotFoundError(banErr)) {
+      return textResponse(banErr.message, 400);
     }
 
     const { error: profileErr } = await adminClient
@@ -92,12 +97,9 @@ Deno.serve(
       .eq('id', body.userId);
 
     if (profileErr) {
-      return new Response(profileErr.message, { status: 400, headers: corsHeaders });
+      return textResponse(profileErr.message, 400);
     }
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ success: true });
   }
 );

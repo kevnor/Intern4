@@ -95,4 +95,25 @@ describe('useSwaps', () => {
     expect(result.current.error).toMatch(/Kunne ikke ta vakten/);
     expect(reloadShifts).toHaveBeenCalled();
   });
+
+  it('keeps the database’s own message but hides raw technical ones', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(claimShift).mockRejectedValueOnce(
+      new Error('Could not claim shift: Vakten er ikke lenger ledig for bytte')
+    );
+    const { result } = await setup();
+
+    await act(async () => {
+      await result.current.claim('s1');
+    });
+    expect(result.current.error).toBe('Vakten er ikke lenger ledig for bytte');
+
+    vi.mocked(requestSwap).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await act(async () => {
+      await result.current.request('s1', null, '');
+    });
+    expect(result.current.error).toBe(
+      'Ingen kontakt med serveren. Sjekk nettverket og prøv igjen.'
+    );
+  });
 });

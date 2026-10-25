@@ -1,9 +1,9 @@
-import { lazy } from 'react';
 import type { FeatureRoute } from '../../shared/types/feature';
 import { RESIDENT_PATHS } from './paths';
+import { lazyWithRetry } from '../../app/lazyWithRetry';
 
-const ResidentDirectoryPage = lazy(() => import('./pages/ResidentDirectoryPage'));
-const ResidentProfilePage = lazy(() => import('./pages/ResidentProfilePage'));
+const ResidentDirectoryPage = lazyWithRetry(() => import('./pages/ResidentDirectoryPage'));
+const ResidentProfilePage = lazyWithRetry(() => import('./pages/ResidentProfilePage'));
 
 export const residentRoutes: FeatureRoute[] = [
   {

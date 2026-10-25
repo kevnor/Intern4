@@ -68,20 +68,26 @@ from auth.users where email = 'you@example.com';
 
 #### Optional: mock data
 
-To try Vakt and Regi with realistic data, load the mock residents, schedule, tasks and hours.
-**Local database only, never a hosted project.** Seed the roles and your own Admin login first
-(above), then:
+To try Vakt, Regi and Rom with realistic data, load the mock residents, schedule, tasks, rooms and
+hours. **Local database only, never a hosted project.** Seed the roles and your own Admin login
+first (above), then:
 
 ```sh
 DB=$(docker ps --format '{{.Names}}' | grep supabase_db)
 docker exec -i $DB psql -U postgres < supabase/mock/vakt-mock-data.sql
 docker exec -i $DB psql -U postgres < supabase/mock/regi-mock-data.sql
+docker exec -i $DB psql -U postgres < supabase/mock/rooms-mock-data.sql
+# Optional: start a romslipp with the first residents already answered.
+docker exec -i $DB psql -U postgres < supabase/mock/romslipp-mock-round.sql
 ```
 
-This adds 70 residents (`mock01@mock.test` to `mock70@mock.test`, password `mock1234`;
-`mock01` is the Vaktsjef), a published schedule for the current semester with swaps, and regi
-tasks and hours in every state. A few shifts and regi entries go to your Admin login. Run the vakt
-script first. Both can be re-run: they remove the earlier mock data and recreate it.
+This adds 70 residents (`mock01@mock.test` to `mock70@mock.test`, password `mock1234`; `mock01` is
+the Vaktsjef, `mock69` the Regisjef and `mock70` the Romsjef), a published vakt schedule with swaps,
+regi tasks and hours in every state, and room types, shared rooms, room history, former residents,
+problem reports and work on rooms. A few shifts and regi entries go to your Admin login. Run the
+scripts in the order above. They can be re-run: they remove the earlier mock data and recreate it.
+Room types stay set afterwards. A romslipp that is running blocks assigning rooms by hand, so cancel
+it from Rom → Romslipp when you want to use Administrer.
 
 ### 5. Run the app
 
@@ -91,6 +97,63 @@ npm run dev
 
 Open <http://localhost:5173> and log in. Emails sent locally, such as password resets, show up in
 Mailpit at <http://127.0.0.1:54324>.
+
+## Sign in with Microsoft (Entra ID)
+
+Residents sign in with their Microsoft account; email and password stays as a fallback. Only people
+Romsjef has already added can get in: the Microsoft account is matched to the resident by **email**
+(case does not matter), and anyone else is refused. Roles are still set in the app, not in Entra.
+
+### 1. Register the app in Entra
+
+In the Entra admin centre go to **App registrations → New registration**:
+
+- **Supported account types:** this organisation only (single tenant).
+- **Redirect URI (Web):** `https://<project-ref>.supabase.co/auth/v1/callback`. For local testing also
+  add `http://localhost:54321/auth/v1/callback` (Entra rejects `127.0.0.1`; `localhost` is allowed over http).
+- **Certificates & secrets:** create a client secret and copy its _value_.
+- **Token configuration → Add optional claim → ID token:** add `email` and `xms_edov`. Without
+  `xms_edov` Supabase does not treat the Microsoft email as verified, and will not link the sign-in to
+  the resident's existing account.
+- Note the **Application (client) ID** and **Directory (tenant) ID**.
+
+### 2. Configure Supabase
+
+On a hosted project: **Authentication → Providers → Azure**: enable it and enter the client ID, the
+secret and the tenant URL `https://login.microsoftonline.com/<tenant-id>` (nothing after the tenant
+ID: Supabase adds the rest). Then
+**Authentication → Hooks → Before User Created**: choose the Postgres function
+`public.hook_before_user_created` (created by migration `20261024100000_add_auth_gate.sql`). It only
+lets an account be created for someone with an active profile and the same email. Add your production
+site URL under **Authentication → URL Configuration**.
+
+Locally, put the values in `supabase/.env` (gitignored):
+
+```sh
+SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID=<client id>
+SUPABASE_AUTH_EXTERNAL_AZURE_SECRET=<client secret>
+SUPABASE_AUTH_EXTERNAL_AZURE_URL=https://login.microsoftonline.com/<tenant-id>
+```
+
+set `enabled = true` under `[auth.external.azure]` (and `[auth.hook.before_user_created]`) in
+`supabase/config.toml`, and restart `npx supabase start`. With the hook on, create a test resident
+with the app's "Ny bruker" form (or the mock scripts), not with Studio's _Add user_, because the
+profile must exist before the login is created.
+
+### Switching off email and password
+
+Email and password is a fallback while Microsoft sign-in beds in. Set `VITE_LOCAL_LOGIN_ENABLED=false`
+when building the app (in `.env.local` locally, or as a build variable where it is deployed) to hide
+the email form and "Glemt passord?", leaving only "Logg inn med Microsoft". It only hides the form: the
+residents' passwords still exist until the login policy changes.
+
+### What happens at sign-in
+
+- A resident Romsjef has added signs in with Microsoft; their Microsoft account is matched by email.
+- Someone else is refused with "Du er ikke registrert som beboer".
+- A deactivated resident is refused on both ways in ("Kontoen er deaktivert"): deactivating bans the
+  login, and the app also checks `is_active` after every sign-in.
+- People who sign in only with Microsoft see a note instead of the password form under Profil → Passord.
 
 ## Scripts
 
@@ -189,9 +252,20 @@ npx supabase migration up --local
 
 ### Edge functions
 
-`create-user` and `delete-user` in `supabase/functions` create and deactivate users with the
-service role. Their role rules live in `supabase/functions/_shared/userManagement.ts`. Keep it in
-sync with `roomManagementRoles` in `src/features/users/permissions.ts`.
+`create-user`, `delete-user` and `reactivate-user` in `supabase/functions` add, deactivate and
+reactivate residents with the service role. Their role rules live in
+`supabase/functions/_shared/userManagement.ts`. Keep it in sync with `roomManagementRoles` in
+`src/features/users/permissions.ts`.
+
+- **create-user** saves the profile first and then creates the login with the same id, and takes the
+  profile back if the login fails.
+- **delete-user** (deactivate) bans the login and sets `is_active = false`. The login is not deleted,
+  so the resident cannot sign in again, with a password or through Microsoft, until reactivated.
+- **reactivate-user** lifts the ban. A login that an older deactivation deleted is recreated with the
+  same id, and a new temporary password is returned to hand over.
+
+The functions are tested with an in-memory stand-in for Supabase (`supabase/functions/_testing`),
+so `npm test` covers their logic without Deno or a network.
 
 ```sh
 npx supabase functions serve   # run locally (needs the edge runtime, see Troubleshooting)
@@ -205,7 +279,7 @@ on staging first if you can:
 ```sh
 npx supabase link --project-ref <project-ref>
 npx supabase db push
-npx supabase functions deploy create-user delete-user
+npx supabase functions deploy create-user delete-user reactivate-user
 ```
 
 ## Troubleshooting
