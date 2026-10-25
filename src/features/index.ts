@@ -1,4 +1,5 @@
 import type { FeatureDefinition } from '../shared/types/feature';
+import { adminFeature } from './admin';
 import { alcoholFeature } from './alcohol';
 import { authFeature } from './auth';
 import { helgaFeature } from './helga';
@@ -14,6 +15,7 @@ import { wineCellarFeature } from './wine-cellar';
 import { FEATURE_ORDER, type FeatureKey } from './featureOrder';
 
 const featuresByKey: Record<FeatureKey, FeatureDefinition> = {
+  admin: adminFeature,
   alcohol: alcoholFeature,
   auth: authFeature,
   helga: helgaFeature,

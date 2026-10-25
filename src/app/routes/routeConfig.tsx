@@ -43,14 +43,6 @@ export const appRoutes: RouteObject[] = [
   },
 ];
 
-// Admin-only routes
-export const adminRoutes: RouteObject[] = [
-  {
-    path: APP_ROUTES.ADMIN,
-    element: <ProtectedRoute />,
-  },
-];
-
 // Regisjef routes
 export const regisjefRoutes: RouteObject[] = [];
 
@@ -71,7 +63,6 @@ export const allRoutes: RouteObject[] = [
   ...publicRoutes,
   ...protectedRoutes,
   ...appRoutes,
-  ...adminRoutes,
   ...regisjefRoutes,
   ...redirectRoutes,
 ];

@@ -68,6 +68,28 @@ describe('Navbar', () => {
     });
   });
 
+  it('shows the Admin link to Admin as well, and not to Romsjef or Regisjef', () => {
+    for (const [role, visible] of [
+      ['Admin', true],
+      ['Data', true],
+      ['Romsjef', false],
+      ['Regisjef', false],
+    ] as const) {
+      mockUseAuth.mockReturnValue({
+        user: { id: '33333333-3333-3333-3333-333333333333', name: 'Test', role },
+      });
+
+      const { unmount } = renderNavbar();
+
+      if (visible) {
+        expect(screen.getByRole('link', { name: 'Admin' }), role).toHaveAttribute('href', '/admin');
+      } else {
+        expect(screen.queryByRole('link', { name: 'Admin' }), role).not.toBeInTheDocument();
+      }
+      unmount();
+    }
+  });
+
   it('hides admin navigation for non-data users', () => {
     mockUseAuth.mockReturnValue({
       user: {
