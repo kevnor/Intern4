@@ -12,7 +12,7 @@ regex = '''sb_secret_[A-Za-z0-9_-]{20,}'''
 keywords = ["sb_secret_"]
 
 [allowlist]
-description = "Public Supabase anon keys"
+description = "Public Supabase anon keys, and a fake password in unit tests"
 # Each entry is a key that is public by design (it ships in every browser bundle and only grants what
 # row level security allows). Anything else that looks like a JWT, such as a service_role key, fails.
 regexes = [
@@ -20,4 +20,6 @@ regexes = [
   '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9\.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0''',
   # This project's hosted anon key (role: anon), found in old committed dist/ build output.
   '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwanNjbmlyZXRzcWtvemdvdHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5NDYwMTMsImV4cCI6MjA3NjUyMjAxM30\.-0Dfq8ITuUl4Bq2HJxDGMaV_81EzzD9X-CrWLcSNwUk''',
+  # A made-up password in two unit tests (CreatedUserDialog, welcomeText). Not a credential.
+  '''Abc123xyz789''',
 ]

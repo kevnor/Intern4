@@ -32,11 +32,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-          cache: npm
 
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-
+      # npm audit reads package-lock.json, so nothing needs installing (and no install scripts run).
       - name: Production dependencies (fails on high or critical)
         run: npm run security:audit
 
@@ -118,27 +115,24 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # The CLI version these migrations and checks were tried with. Dependabot does not bump this one.
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
         with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
+          version: 2.122.0
 
       # Starting the stack applies every migration, so a migration that does not apply fails here.
       # Auth and storage stay on because their schemas are what some migrations refer to.
       - name: Start local Supabase
         run: >
-          npx supabase start
+          supabase start
           -x realtime,imgproxy,mailpit,studio,edge-runtime,logflare,vector,supavisor,postgres-meta
 
       - name: Schema security check
         run: npm run security:db
 
       - name: Lint the database functions
-        run: npx supabase db lint --local --level warning --fail-on error
+        run: supabase db lint --local --level warning --fail-on error
 
       - name: Stop local Supabase
         if: always()
-        run: npx supabase stop --no-backup
+        run: supabase stop --no-backup
