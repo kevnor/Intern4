@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cancelMoveOut,
   getOffboardingPreview,
+  getRecentResidentEvents,
   getResidentEvents,
   planMoveOut,
 } from './offboardingDAO';
@@ -13,7 +14,7 @@ vi.mock('../supabaseClient', () => ({ supabase: { rpc: vi.fn(), from: vi.fn() } 
 
 const eventsQuery = (result: { data?: unknown; error?: { message: string } | null }) => {
   const chain: Record<string, unknown> = {};
-  for (const method of ['select', 'eq', 'order']) chain[method] = vi.fn(() => chain);
+  for (const method of ['select', 'eq', 'order', 'range']) chain[method] = vi.fn(() => chain);
   chain.then = (resolve: (value: unknown) => unknown) =>
     Promise.resolve({ data: null, error: null, ...result }).then(resolve);
   return chain;
@@ -125,5 +126,49 @@ describe('offboardingDAO', () => {
     );
 
     await expect(getResidentEvents('u1')).rejects.toThrow('Could not get the history');
+  });
+
+  it('reads the feed for everyone a page at a time, and says whether there is more', async () => {
+    const row = (n: number) => ({
+      id: `e${n}`,
+      user_id: `u${n}`,
+      kind: 'added',
+      reason: null,
+      details: null,
+      created_at: `2026-10-${10 + n}T10:00:00.000Z`,
+      subject: { name: `Beboer ${n}` },
+      actor: n === 2 ? null : { name: 'Rita Romsjef' },
+    });
+    const query = eventsQuery({ data: [row(3), row(2), row(1)] });
+    vi.mocked(supabase.from).mockReturnValue(query as never);
+
+    const page = await getRecentResidentEvents(2, 4);
+
+    // One more than the page was asked for, so it knows there is another page.
+    expect(query.range).toHaveBeenCalledWith(4, 6);
+    expect(page.hasMore).toBe(true);
+    expect(page.events).toHaveLength(2);
+    expect(page.events[0]).toMatchObject({
+      id: 'e3',
+      userId: 'u3',
+      residentName: 'Beboer 3',
+      actorName: 'Rita Romsjef',
+      details: {},
+    });
+    expect(page.events[1].actorName).toBeNull();
+  });
+
+  it('has no more pages when it gets no more than it asked for', async () => {
+    vi.mocked(supabase.from).mockReturnValue(eventsQuery({ data: [] }) as never);
+
+    await expect(getRecentResidentEvents(30)).resolves.toEqual({ events: [], hasMore: false });
+  });
+
+  it('fails clearly when the feed cannot be read', async () => {
+    vi.mocked(supabase.from).mockReturnValue(
+      eventsQuery({ error: { message: 'permission denied' } }) as never
+    );
+
+    await expect(getRecentResidentEvents(30)).rejects.toThrow('Could not get the history');
   });
 });

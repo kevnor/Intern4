@@ -2,12 +2,16 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../app/providers/AuthContext';
 import { PageLayout } from '../../../shared/layouts';
 import { SectionTabs, Spinner } from '../../../shared/components';
+import MoveOutsTab from '../components/MoveOutsTab';
+import OverviewTab from '../components/OverviewTab';
 import RolesTab from '../components/RolesTab';
 import SemesterTab from '../components/SemesterTab';
 import { ADMIN_PATHS } from '../paths';
 import { canAccessAdmin } from '../permissions';
 
 const TABS = [
+  { key: 'overview', label: 'Oversikt', path: ADMIN_PATHS.OVERVIEW },
+  { key: 'moveouts', label: 'Utflyttinger', path: ADMIN_PATHS.MOVE_OUTS },
   { key: 'roles', label: 'Roller', path: ADMIN_PATHS.ROLES },
   { key: 'semester', label: 'Semester', path: ADMIN_PATHS.SEMESTER },
 ] as const;
@@ -28,7 +32,7 @@ const AdminHubPage = () => {
   return (
     <PageLayout
       title="Admin"
-      description="Roller og innstillinger for dem som administrerer Intern."
+      description="Oversikt, utflyttinger, roller og innstillinger for dem som administrerer Intern."
     >
       <SectionTabs
         label="Admin"
@@ -38,6 +42,8 @@ const AdminHubPage = () => {
       />
 
       <div role="tabpanel" aria-label={activeTab.label}>
+        {activeTab.key === 'overview' && <OverviewTab />}
+        {activeTab.key === 'moveouts' && <MoveOutsTab />}
         {activeTab.key === 'roles' && <RolesTab />}
         {activeTab.key === 'semester' && <SemesterTab />}
       </div>

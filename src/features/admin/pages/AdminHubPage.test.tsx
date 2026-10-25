@@ -3,15 +3,41 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminHubPage from './AdminHubPage';
-import { getAllUsersWithRole } from '../../../server/dao/userDAO';
+import { getAllUsersWithRole, getResidentDirectoryUsers } from '../../../server/dao/userDAO';
+import { getPendingRegiApprovals } from '../../../server/dao/regiDAO';
+import { getRooms } from '../../../server/dao/roomsDAO';
+import { getRoomReports } from '../../../server/dao/roomReportsDAO';
+import type { ResidentDirectoryUser } from '../../../shared/types/user';
 
 const mockUseAuth = vi.fn();
 
 vi.mock('../../../app/providers/AuthContext', () => ({ useAuth: () => mockUseAuth() }));
-vi.mock('../../../server/dao/userDAO', () => ({ getAllUsersWithRole: vi.fn() }));
+vi.mock('../../../server/dao/userDAO', () => ({
+  getAllUsersWithRole: vi.fn(),
+  getResidentDirectoryUsers: vi.fn(),
+}));
+vi.mock('../../../server/dao/regiDAO', () => ({ getPendingRegiApprovals: vi.fn() }));
 vi.mock('../../regi/hooks/useSemesterHours', () => ({
   useSemesterHours: () => ({ totalHours: 40, loading: false, save: vi.fn() }),
 }));
+
+const resident = (id: string, overrides: Partial<ResidentDirectoryUser> = {}) =>
+  ({
+    id,
+    name: id,
+    email: '',
+    phone: '',
+    birthDate: null,
+    study: '',
+    studyPlace: '',
+    seniority: 0,
+    roomNumber: 101,
+    createdAt: null,
+    onLeave: false,
+    isActive: true,
+    address: { street: '', postalCode: '', city: '' },
+    ...overrides,
+  }) as ResidentDirectoryUser;
 
 const renderAt = (path: string) =>
   render(
@@ -26,6 +52,16 @@ describe('AdminHubPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseAuth.mockReturnValue({ user: { id: 'u', name: 'Data', role: 'Data' }, loading: false });
+    vi.mocked(getResidentDirectoryUsers).mockResolvedValue([
+      resident('a'),
+      resident('b', { onLeave: true }),
+      resident('c', { roomNumber: 0 }),
+    ]);
+    vi.mocked(getRooms).mockResolvedValue([
+      { id: 'r1', number: 101, type: null, capacity: 2, occupants: [] },
+    ]);
+    vi.mocked(getRoomReports).mockResolvedValue([]);
+    vi.mocked(getPendingRegiApprovals).mockResolvedValue([]);
     vi.mocked(getAllUsersWithRole).mockResolvedValue([
       {
         id: 'r1',
@@ -39,10 +75,46 @@ describe('AdminHubPage', () => {
     ]);
   });
 
-  it('opens on the first tab when the address has no tab', async () => {
+  it('opens on Oversikt when the address has no tab', async () => {
     renderAt('/admin');
 
-    expect(await screen.findByRole('tabpanel', { name: 'Roller' })).toBeInTheDocument();
+    expect(await screen.findByRole('tabpanel', { name: 'Oversikt' })).toBeInTheDocument();
+  });
+
+  it('shows what needs a look, each number linking to where it is dealt with', async () => {
+    vi.mocked(getPendingRegiApprovals).mockResolvedValue([{}, {}, {}] as never);
+    renderAt('/admin/oversikt');
+
+    const panel = await screen.findByRole('tabpanel', { name: 'Oversikt' });
+    const tile = async (label: string) =>
+      (await within(panel).findByText(label)).closest('a') as HTMLElement;
+
+    const active = await tile('Aktive beboere');
+    expect(within(active).getByText('3')).toBeInTheDocument();
+    expect(active).toHaveAttribute('href', '/beboere');
+    expect(within(await tile('På permisjon')).getByText('1')).toBeInTheDocument();
+    expect(within(await tile('Uten rom')).getByText('1')).toBeInTheDocument();
+    expect(within(await tile('Ledige plasser')).getByText('2')).toBeInTheDocument();
+    const approvals = await tile('Regi til godkjenning');
+    expect(within(approvals).getByText('3')).toBeInTheDocument();
+    expect(approvals).toHaveAttribute('href', '/regi/godkjenning');
+    expect(await tile('Planlagte utflyttinger')).toHaveAttribute('href', '/admin/utflyttinger');
+    expect(await tile('Åpne romrapporter')).toHaveAttribute('href', '/rom/meldinger');
+  });
+
+  it('shows a dash for a number that cannot be read, and still shows the rest', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(getPendingRegiApprovals).mockRejectedValue(new Error('permission denied'));
+    renderAt('/admin/oversikt');
+
+    const panel = await screen.findByRole('tabpanel', { name: 'Oversikt' });
+    const approvals = (await within(panel).findByText('Regi til godkjenning')).closest(
+      'a'
+    ) as HTMLElement;
+    expect(within(approvals).getByText('–')).toBeInTheDocument();
+    expect(within(approvals).getByText('Kunne ikke leses')).toBeInTheDocument();
+    const active = (await within(panel).findByText('Aktive beboere')).closest('a') as HTMLElement;
+    expect(within(active).getByText('3')).toBeInTheDocument();
   });
 
   it('shows who holds each position role, and flags a role nobody holds', async () => {
@@ -60,7 +132,7 @@ describe('AdminHubPage', () => {
 
   it('shows the required hours under Semester', async () => {
     const user = userEvent.setup();
-    renderAt('/admin/roller');
+    renderAt('/admin/oversikt');
 
     await user.click(await screen.findByRole('tab', { name: 'Semester' }));
 

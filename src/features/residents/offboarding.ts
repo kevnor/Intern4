@@ -30,6 +30,9 @@ export type ResidentEvent = {
   createdAt: Date;
 };
 
+// An event in the feed for everyone, so it also says which resident it is about.
+export type ResidentFeedEvent = ResidentEvent & { userId: string; residentName: string };
+
 // The lines of the confirmation: only what applies to this resident.
 export const describeOffboarding = (preview: OffboardingPreview): string[] => {
   const lines: string[] = [];
