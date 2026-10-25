@@ -1,0 +1,8 @@
+# Changes here need a review from the owner: they decide who can read and write data, and what runs
+# in CI with access to the repository.
+/supabase/migrations/ @kevnor
+/supabase/functions/  @kevnor
+/supabase/config.toml @kevnor
+/scripts/             @kevnor
+/.github/             @kevnor
+/.gitleaks.toml       @kevnor
