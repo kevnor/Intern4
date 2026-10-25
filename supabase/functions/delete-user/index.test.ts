@@ -17,26 +17,42 @@ afterEach(() => {
 });
 
 describe('delete-user', () => {
-  it('bans the login instead of deleting it, and deactivates the profile', async () => {
+  it('moves the resident out through the database function, which bans the login', async () => {
     fake = createFakeSupabase({
       callerId: 'romsjef',
       callerRole: 'Romsjef',
       profiles: [RESIDENT],
       logins: [LOGIN],
+      offboardDetails: { shiftsReleased: 3, romslippSkipped: 1, roleReset: null },
     });
 
-    const response = await (await load())(post({ userId: 'resident' }));
+    const response = await (await load())(post({ userId: 'resident', reason: ' Ferdig ' }));
 
     expect(response.status).toBe(200);
-    expect(fake.logins.get('resident')?.banned).toBe(true);
+    expect(await response.json()).toEqual({
+      success: true,
+      shiftsReleased: 3,
+      romslippSkipped: 1,
+      roleReset: null,
+    });
+    expect(fake.log).toContain('rpc offboard_user_internal');
     expect(fake.log).not.toContain('delete login');
+    expect(fake.logins.get('resident')?.banned).toBe(true);
     expect(fake.profiles.find((p) => p.id === 'resident')).toMatchObject({
       is_active: false,
       on_leave: false,
     });
+    expect(fake.events).toEqual([
+      expect.objectContaining({
+        user_id: 'resident',
+        kind: 'moved_out',
+        actor_id: 'romsjef',
+        reason: 'Ferdig',
+      }),
+    ]);
   });
 
-  it('still deactivates a resident whose login no longer exists', async () => {
+  it('still moves out a resident whose login no longer exists', async () => {
     fake = createFakeSupabase({
       callerId: 'romsjef',
       callerRole: 'Romsjef',
@@ -49,19 +65,19 @@ describe('delete-user', () => {
     expect(fake.profiles.find((p) => p.id === 'resident')?.is_active).toBe(false);
   });
 
-  it('leaves the profile alone when the ban fails', async () => {
+  it('passes the database error on and leaves the resident active', async () => {
     fake = createFakeSupabase({
       callerId: 'romsjef',
       callerRole: 'Romsjef',
       profiles: [RESIDENT],
       logins: [LOGIN],
-      failures: { ban: 'Auth service down' },
+      failures: { offboard: 'Noe gikk galt' },
     });
 
     const response = await (await load())(post({ userId: 'resident' }));
 
     expect(response.status).toBe(400);
-    expect(await response.text()).toBe('Auth service down');
+    expect(await response.text()).toBe('Noe gikk galt');
     expect(fake.profiles.find((p) => p.id === 'resident')?.is_active).toBe(true);
   });
 

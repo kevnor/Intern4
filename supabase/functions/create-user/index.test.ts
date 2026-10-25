@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFakeSupabase, type FakeSupabase } from '../_testing/fakeSupabase';
 import { loadFunction, post } from '../_testing/loadFunction';
 
@@ -16,6 +16,7 @@ const romsjef = (options: Partial<Parameters<typeof createFakeSupabase>[0]> = {}
 
 afterEach(() => {
   fake = undefined as never;
+  vi.restoreAllMocks();
 });
 
 describe('create-user', () => {
@@ -108,5 +109,53 @@ describe('create-user', () => {
       school_id: 'school-annet',
       study_id: 'study-annet',
     });
+  });
+
+  it('refuses an email that is already in use, whatever its case', async () => {
+    fake = romsjef({
+      profiles: [{ id: 'kari', email: 'kari.nordmann@example.no', is_active: false, role_id: 7 }],
+    });
+
+    const response = await (await load())(post(NEW_RESIDENT));
+
+    expect(response.status).toBe(409);
+    expect(await response.text()).toBe('Det finnes allerede en beboer med denne e-postadressen');
+    expect(fake.log).not.toContain('insert users');
+    expect(fake.logins.size).toBe(0);
+  });
+
+  it('trims the email before it is used', async () => {
+    fake = romsjef();
+
+    const response = await (
+      await load()
+    )(post({ ...NEW_RESIDENT, email: '  Kari.Nordmann@Example.no ' }));
+
+    expect(response.status).toBe(200);
+    expect(fake.profiles.find((p) => p.email === NEW_RESIDENT.email)).toBeDefined();
+    expect([...fake.logins.values()][0].email).toBe(NEW_RESIDENT.email);
+  });
+
+  it('logs who added the resident', async () => {
+    fake = romsjef();
+
+    const response = await (await load())(post(NEW_RESIDENT));
+    const body = await response.json();
+
+    expect(fake.events).toEqual([
+      expect.objectContaining({
+        user_id: body.user.id,
+        kind: 'added',
+        actor_id: 'romsjef',
+        details: { role: 'Halv/Halv' },
+      }),
+    ]);
+  });
+
+  it('still succeeds when the log cannot be written', async () => {
+    fake = romsjef({ failures: { event: 'permission denied' } });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect((await (await load())(post(NEW_RESIDENT))).status).toBe(200);
   });
 });

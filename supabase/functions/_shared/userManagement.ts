@@ -14,9 +14,37 @@ export const USER_MANAGER_ROLES = ['Admin', 'Data', 'Romsjef', 'Regisjef'];
 export const canManageUsers = (role?: string | null): boolean =>
   Boolean(role) && USER_MANAGER_ROLES.includes(role as string);
 
-// A deactivated resident's login is banned for this long (about a hundred years) instead of being
-// deleted, so they cannot sign in again, with a password or through Microsoft, until reactivated.
-export const BAN_DURATION = '876000h';
+// Moving a resident out bans their login (see offboard_user_internal) instead of deleting it, so they
+// cannot sign in again, with a password or through Microsoft, until reactivated.
+
+// Makes a value safe to use as a whole LIKE/ILIKE pattern: % and _ are wildcards, \\ escapes them.
+export const escapeLikePattern = (value: string): string => value.replace(/[\\%_]/g, '\\$&');
+
+type EventClient = {
+  from: (table: string) => {
+    insert: (row: Record<string, unknown>) => PromiseLike<{ error: { message: string } | null }>;
+  };
+};
+
+// Adds a line to the log shown on the resident's profile. The log is a record, not part of the
+// action itself, so a failure to write it is reported but never undoes what was done.
+export async function recordResidentEvent(
+  client: EventClient,
+  event: {
+    userId: string;
+    kind: 'added' | 'reactivated';
+    actorId: string;
+    details?: Record<string, unknown>;
+  }
+): Promise<void> {
+  const { error } = await client.from('resident_events').insert({
+    user_id: event.userId,
+    kind: event.kind,
+    actor_id: event.actorId,
+    details: event.details ?? {},
+  });
+  if (error) console.error(`Could not log ${event.kind} for ${event.userId}: ${error.message}`);
+}
 
 export function generatePassword(length = 12): string {
   // No characters that are easy to mix up when read aloud or copied (0/O, 1/l/I).

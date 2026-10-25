@@ -180,7 +180,7 @@ src/
   shared/     Reusable UI components, layouts, types and utilities
 supabase/
   migrations/ Database schema and RLS policies
-  functions/  Edge functions (create-user, delete-user) and shared role rules
+  functions/  Edge functions (create-user, delete-user, reactivate-user) and shared role rules
 ```
 
 Features are organized by business domain, not by role. See
@@ -257,12 +257,26 @@ reactivate residents with the service role. Their role rules live in
 `supabase/functions/_shared/userManagement.ts`. Keep it in sync with `roomManagementRoles` in
 `src/features/users/permissions.ts`.
 
-- **create-user** saves the profile first and then creates the login with the same id, and takes the
-  profile back if the login fails.
-- **delete-user** (deactivate) bans the login and sets `is_active = false`. The login is not deleted,
-  so the resident cannot sign in again, with a password or through Microsoft, until reactivated.
-- **reactivate-user** lifts the ban. A login that an older deactivation deleted is recreated with the
-  same id, and a new temporary password is returned to hand over.
+- **create-user** refuses an email that is already in use (any case), saves the profile first and then
+  creates the login with the same id, and takes the profile back if the login fails. It logs `added`.
+- **delete-user** (move out now) checks who is asking and then calls the database function
+  `offboard_user_internal`; see "Moving residents out" below.
+- **reactivate-user** lifts the ban and logs `reactivated`. A login that an older deactivation deleted
+  is recreated with the same id, and a new temporary password is returned to hand over.
+
+### Moving residents out
+
+`offboard_user_internal` does the whole move-out in one transaction, for both "Flytt ut nå" and a
+planned date: future Vakt shifts become open gaps (and open swaps are cancelled), the person is skipped
+in a running romslipp, a position role (Daglig leder, Data, Regisjef, Romsjef, Utvalgsmedlem, Vaktsjef)
+is reset to Halv/Halv, the room is freed, the login is banned (the resident cannot sign in again, with
+a password or through Microsoft, until reactivated) and a `moved_out` line is written to
+`resident_events`. An Admin cannot be moved out.
+
+A planned date (`users.move_out_date`) is picked up by the `offboard-due-users` job, which `pg_cron`
+runs every hour; the date is checked by the Oslo clock. On a hosted project `pg_cron` is enabled by the
+migration. It runs as the database owner, so check `select * from cron.job_run_details order by
+start_time desc limit 5;` after the first planned move-out.
 
 The functions are tested with an in-memory stand-in for Supabase (`supabase/functions/_testing`),
 so `npm test` covers their logic without Deno or a network.

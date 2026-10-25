@@ -6,6 +6,7 @@ import {
   generatePassword,
   isNotFoundError,
   jsonResponse,
+  recordResidentEvent,
   textResponse,
 } from '../_shared/userManagement.ts';
 
@@ -104,6 +105,12 @@ Deno.serve(
         return textResponse(unbanErr.message, 400);
       }
 
+      await recordResidentEvent(adminClient, {
+        userId: profile.id,
+        kind: 'reactivated',
+        actorId: me.user.id,
+      });
+
       return jsonResponse({ success: true });
     }
 
@@ -123,6 +130,13 @@ Deno.serve(
       await adminClient.from('users').update({ is_active: false }).eq('id', profile.id);
       return textResponse(createErr.message, 400);
     }
+
+    await recordResidentEvent(adminClient, {
+      userId: profile.id,
+      kind: 'reactivated',
+      actorId: me.user.id,
+      details: { loginRecreated: true },
+    });
 
     return jsonResponse({ success: true, initialPassword: password, email: profile.email });
   }

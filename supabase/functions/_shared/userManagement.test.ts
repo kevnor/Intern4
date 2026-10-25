@@ -1,11 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
-  BAN_DURATION,
   USER_MANAGER_ROLES,
   canManageUsers,
+  escapeLikePattern,
   generatePassword,
   isNotFoundError,
   jsonResponse,
+  recordResidentEvent,
   textResponse,
 } from './userManagement';
 
@@ -76,8 +77,45 @@ describe('responses and ban duration', () => {
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
   });
 
-  it('bans for about a hundred years, in the unit the auth API wants', () => {
-    expect(BAN_DURATION).toMatch(/^\d+h$/);
-    expect(Number.parseInt(BAN_DURATION, 10)).toBeGreaterThan(24 * 365 * 50);
+  it('escapes the wildcards of a LIKE pattern, so an address matches only itself', () => {
+    expect(escapeLikePattern('kari_nordmann@example.no')).toBe('kari\\_nordmann@example.no');
+    expect(escapeLikePattern('100%\\')).toBe('100\\%\\\\');
+  });
+});
+
+describe('recordResidentEvent', () => {
+  const clientThatReturns = (error: { message: string } | null) => {
+    const rows: Record<string, unknown>[] = [];
+    return {
+      rows,
+      from: (table: string) => ({
+        insert: async (row: Record<string, unknown>) => {
+          rows.push({ table, ...row });
+          return { error };
+        },
+      }),
+    };
+  };
+
+  it('writes the event to the log', async () => {
+    const client = clientThatReturns(null);
+
+    await recordResidentEvent(client, { userId: 'u1', kind: 'added', actorId: 'm1' });
+
+    expect(client.rows).toEqual([
+      { table: 'resident_events', user_id: 'u1', kind: 'added', actor_id: 'm1', details: {} },
+    ]);
+  });
+
+  it('reports a failure without throwing, because the action itself has already happened', async () => {
+    const client = clientThatReturns({ message: 'permission denied' });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(
+      recordResidentEvent(client, { userId: 'u1', kind: 'reactivated', actorId: 'm1' })
+    ).resolves.toBeUndefined();
+
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('permission denied'));
+    spy.mockRestore();
   });
 });

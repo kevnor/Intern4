@@ -122,4 +122,21 @@ describe('reactivate-user', () => {
     );
     expect((await handler(new Request('http://localhost/fn', { method: 'GET' }))).status).toBe(405);
   });
+
+  it('logs who reactivated the resident', async () => {
+    fake = createFakeSupabase({
+      callerId: 'romsjef',
+      callerRole: 'Romsjef',
+      profiles: [RESIDENT],
+      logins: [{ id: 'resident', email: 'kari@example.no', banned: true }],
+    });
+
+    await (
+      await load()
+    )(post({ userId: 'resident' }));
+
+    expect(fake.events).toEqual([
+      expect.objectContaining({ user_id: 'resident', kind: 'reactivated', actor_id: 'romsjef' }),
+    ]);
+  });
 });

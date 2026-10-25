@@ -5,7 +5,13 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { canManageUsers, corsHeaders, generatePassword } from '../_shared/userManagement.ts';
+import {
+  canManageUsers,
+  corsHeaders,
+  escapeLikePattern,
+  generatePassword,
+  recordResidentEvent,
+} from '../_shared/userManagement.ts';
 
 type AddressInput = {
   street?: string;
@@ -136,8 +142,27 @@ Deno.serve(async (req) => {
   }
 
   const password = generatePassword();
+  const email = body.email.trim();
 
   const adminClient = createClient(supabaseUrl, serviceKey);
+
+  // The same address in another case is the same person, and the sign-in gate matches that way too.
+  const { data: sameEmail, error: sameEmailErr } = await adminClient
+    .from('users')
+    .select('id')
+    .ilike('email', escapeLikePattern(email))
+    .limit(1);
+
+  if (sameEmailErr) {
+    return new Response('Failed to check the email', { status: 500, headers: corsHeaders });
+  }
+
+  if (sameEmail && sameEmail.length > 0) {
+    return new Response('Det finnes allerede en beboer med denne e-postadressen', {
+      status: 409,
+      headers: corsHeaders,
+    });
+  }
 
   const roleName = body.role ?? 'Halv/Halv';
   const { data: roleLookup, error: roleLookupErr } = await adminClient
@@ -169,7 +194,7 @@ Deno.serve(async (req) => {
 
   const { error: profileErr } = await adminClient.from('users').insert({
     id: userId,
-    email: body.email,
+    email,
     name: body.name,
     phone: body.phone ?? null,
     birth_date: body.birthDate ? new Date(body.birthDate).toISOString() : null,
@@ -195,7 +220,7 @@ Deno.serve(async (req) => {
   // some versions of the client's type.
   const attributes = {
     id: userId,
-    email: body.email,
+    email,
     password,
     email_confirm: true,
     user_metadata: { name: body.name },
@@ -209,6 +234,13 @@ Deno.serve(async (req) => {
     const msg = createErr?.message ?? 'Failed to create user';
     return new Response(msg, { status: 400, headers: corsHeaders });
   }
+
+  await recordResidentEvent(adminClient, {
+    userId,
+    kind: 'added',
+    actorId: me.user.id,
+    details: { role: roleName },
+  });
 
   return new Response(JSON.stringify({ user: created.user, initialPassword: password }), {
     status: 200,
