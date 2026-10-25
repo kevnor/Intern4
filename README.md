@@ -206,7 +206,7 @@ reported in the job summary.
 | Job              | What it checks                                                                                                                                       | Run it locally                         |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
 | Dependency audit | `npm audit` on production dependencies fails on high or critical. All dependencies are listed in the summary, report only (dev tooling never ships). | `npm run security:audit`               |
-| Secret scan      | gitleaks over the pull request's commits (the whole history on `main` and the weekly run), with [`.gitleaks.toml`](.gitleaks.toml).                  | `gitleaks git --config .gitleaks.toml` |
+| Secret scan      | gitleaks over the whole history, on pull requests too, with [`.gitleaks.toml`](.gitleaks.toml) and [`.gitleaksignore`](.gitleaksignore).             | `gitleaks git --config .gitleaks.toml` |
 | Code analysis    | CodeQL (`security-extended`) on the app and the edge functions. Results are under **Security → Code scanning**.                                      | CI only                                |
 | Database checks  | Starts local Supabase (applying every migration), then [`scripts/db-security-check.sql`](scripts/db-security-check.sql) and `supabase db lint`.      | `npm run security:db`                  |
 
@@ -215,7 +215,8 @@ function without a fixed `search_path` or callable by `anon`, any `anon` privile
 `public`, a view that bypasses row level security, and a public storage bucket. To accept a finding on
 purpose, add it to the allowlist at the top of the script, with the reason next to it. The same goes
 for `.gitleaks.toml`: it allows only this project's two public anon keys, so any other JWT (a
-`service_role` key, say) fails.
+`service_role` key, say) fails. Accepted findings from the past (three old Firebase web keys) are
+listed by fingerprint in `.gitleaksignore`, each with the reason.
 
 Dependabot proposes npm and GitHub Actions updates weekly (`.github/dependabot.yml`). Actions are
 pinned by commit SHA; Dependabot keeps the SHAs current. Changes to migrations, edge functions, scripts

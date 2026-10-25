@@ -1,0 +1,12 @@
+# Findings accepted on purpose, by fingerprint (commit:file:rule:line), so only these exact lines in
+# these exact commits are skipped. Anything new, including the same key somewhere else, still fails.
+#
+# Firebase web API keys from before the app moved to Supabase (July to October 2025). A Firebase web
+# API key is an identifier that ships in every client bundle; access is controlled by the Firebase
+# project's rules and by restrictions on the key, not by keeping it secret. The files are gone from
+# the code (src/services/firebase/, removed in 443b560) and no Firebase key is in it today. If that
+# Firebase project still exists, restrict or delete the key in Google Cloud Console, because history
+# cannot be made to forget it.
+869f6c6c44f063c593444aedac943815d51c9934:src/services/firebase/firebaseConfig.ts:gcp-api-key:17
+5c4312cd6414008831829a219920e0204b5bca93:src/services/firebase/firebaseConfig.ts:gcp-api-key:17
+b4d1c47215dac94203ad18a4f6147baba39ebaf8:src/services/firebase/config.js:gcp-api-key:7
