@@ -176,8 +176,8 @@ describe('ResidentProfilePage', () => {
     expect(screen.queryByText('Historikk')).not.toBeInTheDocument();
   });
 
-  it('shows the history to the people who manage residents, Regisjef included', async () => {
-    asRole('Regisjef');
+  it('shows the history and Flytt ut to the people who manage residents', async () => {
+    asRole('Romsjef');
     vi.mocked(getResidentEvents).mockResolvedValue([
       {
         id: 'e1',
@@ -196,7 +196,15 @@ describe('ResidentProfilePage', () => {
     expect(await within(history).findByText('Lagt til')).toBeInTheDocument();
     expect(within(history).getByText(/Rita Romsjef/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Flytt ut' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Rediger' })).not.toBeInTheDocument();
+  });
+
+  it('gives Regisjef no way to move residents out or see their history', async () => {
+    asRole('Regisjef');
+    renderProfile();
+
+    await screen.findByRole('heading', { name: 'Administrasjon' });
+    expect(screen.queryByRole('button', { name: 'Flytt ut' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Historikk')).not.toBeInTheDocument();
   });
 
   it('offers reactivation for former residents and never a move-out for them', async () => {

@@ -42,6 +42,8 @@ export function createFakeSupabase(options: {
   const roles = options.roles ?? [
     { id: 1, name: 'Admin' },
     { id: 2, name: 'Romsjef' },
+    { id: 3, name: 'Data' },
+    { id: 4, name: 'Vaktsjef' },
     { id: 7, name: 'Halv/Halv' },
   ];
   // Copies, so one test changing a profile does not leak into the next.

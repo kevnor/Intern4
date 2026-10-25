@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
+  canManageRole,
   canManageUsers,
   corsHeaders,
   jsonResponse,
@@ -70,16 +71,27 @@ Deno.serve(
 
     const adminClient = createClient(supabaseUrl, serviceKey);
 
-    // Prevent deactivation of admin users
-    const { data: targetRole } = await adminClient
+    const { data: target, error: targetErr } = await adminClient
       .from('users')
       .select('roles(name)')
       .eq('id', body.userId)
       .maybeSingle();
 
-    const targetRoleName = (targetRole?.roles as { name?: string } | null | undefined)?.name;
+    if (targetErr) {
+      return textResponse('Unable to look up user', 500);
+    }
+
+    if (!target) {
+      return textResponse('Fant ikke brukeren', 404);
+    }
+
+    const targetRoleName = (target.roles as { name?: string } | null | undefined)?.name ?? '';
     if (targetRoleName === 'Admin') {
       return textResponse('Kan ikke deaktivere admin-brukere', 403);
+    }
+
+    if (!canManageRole(myRole, targetRoleName)) {
+      return textResponse(`Du kan ikke flytte ut brukere med rollen ${targetRoleName}`, 403);
     }
 
     const { data: details, error: offboardErr } = await adminClient.rpc('offboard_user_internal', {

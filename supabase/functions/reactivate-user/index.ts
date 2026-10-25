@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
+  canManageRole,
   canManageUsers,
   corsHeaders,
   generatePassword,
@@ -51,7 +52,8 @@ Deno.serve(
       return textResponse('Unable to verify role', 500);
     }
 
-    if (!canManageUsers(roleRow?.roles?.name as string | undefined)) {
+    const myRole = roleRow?.roles?.name as string | undefined;
+    if (!canManageUsers(myRole)) {
       return textResponse('Forbidden', 403);
     }
 
@@ -64,7 +66,7 @@ Deno.serve(
 
     const { data: profile, error: profileErr } = await adminClient
       .from('users')
-      .select('id, email, name, is_active')
+      .select('id, email, name, is_active, roles(name)')
       .eq('id', body.userId)
       .maybeSingle();
 
@@ -73,6 +75,12 @@ Deno.serve(
     }
     if (!profile?.email) {
       return textResponse('Fant ikke beboeren', 404);
+    }
+
+    // The same rule as for moving out: only Admin and Data touch someone who holds a management role.
+    const targetRoleName = (profile.roles as { name?: string } | null | undefined)?.name ?? '';
+    if (!canManageRole(myRole as string, targetRoleName)) {
+      return textResponse(`Du kan ikke reaktivere brukere med rollen ${targetRoleName}`, 403);
     }
 
     // Active again first: a new login is only created for an active profile, and a ban lifted

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   USER_MANAGER_ROLES,
+  canManageRole,
   canManageUsers,
   escapeLikePattern,
   generatePassword,
@@ -11,8 +12,8 @@ import {
 } from './userManagement';
 
 describe('canManageUsers', () => {
-  it('allows Admin, Data, Romsjef and Regisjef', () => {
-    for (const role of ['Admin', 'Data', 'Romsjef', 'Regisjef']) {
+  it('allows Admin, Data and Romsjef', () => {
+    for (const role of ['Admin', 'Data', 'Romsjef']) {
       expect(canManageUsers(role)).toBe(true);
     }
   });
@@ -20,6 +21,7 @@ describe('canManageUsers', () => {
   it('rejects everyone else, including the old misspelt role name', () => {
     expect(canManageUsers('Halv/Halv')).toBe(false);
     expect(canManageUsers('Vaktsjef')).toBe(false);
+    expect(canManageUsers('Regisjef')).toBe(false);
     expect(canManageUsers('Data Åpmand')).toBe(false);
     expect(canManageUsers(undefined)).toBe(false);
     expect(canManageUsers(null)).toBe(false);
@@ -28,8 +30,29 @@ describe('canManageUsers', () => {
 
   it('matches the roles that can reach the "Ny bruker" button in the app', () => {
     // roomManagementRoles in src/features/users/permissions.ts
-    for (const role of ['Admin', 'Romsjef', 'Data']) {
-      expect(USER_MANAGER_ROLES).toContain(role);
+    expect([...USER_MANAGER_ROLES].sort()).toEqual(['Admin', 'Data', 'Romsjef']);
+  });
+});
+
+describe('canManageRole', () => {
+  it('lets Admin manage anyone', () => {
+    for (const target of ['Admin', 'Data', 'Romsjef', 'Halv/Halv']) {
+      expect(canManageRole('Admin', target)).toBe(true);
+    }
+  });
+
+  it('lets Data manage anyone except an Admin', () => {
+    expect(canManageRole('Data', 'Romsjef')).toBe(true);
+    expect(canManageRole('Data', 'Halv/Halv')).toBe(true);
+    expect(canManageRole('Data', 'Admin')).toBe(false);
+  });
+
+  it('keeps Romsjef to ordinary residents and the roles that carry no management access', () => {
+    for (const target of ['Halv/Halv', 'Full Vakt', 'Full Regi', 'Vaktsjef', 'Utvalgsmedlem']) {
+      expect(canManageRole('Romsjef', target)).toBe(true);
+    }
+    for (const target of ['Admin', 'Data', 'Regisjef', 'Romsjef', 'Daglig leder']) {
+      expect(canManageRole('Romsjef', target)).toBe(false);
     }
   });
 });

@@ -6,6 +6,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
+  canManageRole,
   canManageUsers,
   corsHeaders,
   escapeLikePattern,
@@ -165,6 +166,13 @@ Deno.serve(async (req) => {
   }
 
   const roleName = body.role ?? 'Halv/Halv';
+  if (!canManageRole(myRole, roleName)) {
+    return new Response(`Du kan ikke tildele rollen ${roleName}`, {
+      status: 403,
+      headers: corsHeaders,
+    });
+  }
+
   const { data: roleLookup, error: roleLookupErr } = await adminClient
     .from('roles')
     .select('id')

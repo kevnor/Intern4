@@ -96,9 +96,10 @@ describe('delete-user', () => {
     expect(fake.profiles.find((p) => p.id === 'boss')?.is_active).toBe(true);
   });
 
-  it('lets Romsjef, Data, Regisjef and Admin do it, but nobody else', async () => {
+  it('lets Romsjef, Data and Admin do it, but nobody else', async () => {
     for (const [role, expected] of [
       ['Admin', 200],
+      ['Data', 200],
       ['Romsjef', 200],
       ['Halv/Halv', 403],
     ] as const) {
@@ -117,5 +118,46 @@ describe('delete-user', () => {
     fake = createFakeSupabase({ callerId: 'romsjef', callerRole: 'Romsjef' });
 
     expect((await (await load())(post({}))).status).toBe(400);
+  });
+
+  it('keeps Romsjef from moving out someone who holds a management role', async () => {
+    for (const [targetRoleId, expected] of [
+      [3, 403], // Data
+      [2, 403], // another Romsjef
+      [4, 200], // Vaktsjef
+      [7, 200], // an ordinary resident
+    ] as const) {
+      fake = createFakeSupabase({
+        callerId: 'romsjef',
+        callerRole: 'Romsjef',
+        profiles: [{ ...RESIDENT, role_id: targetRoleId }],
+        logins: [LOGIN],
+      });
+
+      const response = await (await load())(post({ userId: 'resident' }));
+
+      expect(response.status, `role ${targetRoleId}`).toBe(expected);
+      expect(fake.profiles.find((p) => p.id === 'resident')?.is_active).toBe(expected !== 200);
+    }
+  });
+
+  it('lets Data move out a Romsjef', async () => {
+    fake = createFakeSupabase({
+      callerId: 'data',
+      callerRole: 'Data',
+      profiles: [{ ...RESIDENT, role_id: 2 }],
+      logins: [LOGIN],
+    });
+
+    expect((await (await load())(post({ userId: 'resident' }))).status).toBe(200);
+  });
+
+  it('says so when the resident does not exist', async () => {
+    fake = createFakeSupabase({ callerId: 'romsjef', callerRole: 'Romsjef' });
+
+    const response = await (await load())(post({ userId: 'ghost' }));
+
+    expect(response.status).toBe(404);
+    expect(fake.log).not.toContain('rpc offboard_user_internal');
   });
 });

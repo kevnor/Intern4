@@ -111,6 +111,8 @@ CREATE POLICY "Users can update own profile"
   TO authenticated
   USING (auth.uid() = id)
   WITH CHECK (auth.uid() = id);
+-- Privileged columns (role_id, is_active, room_number, ...) are guarded by the
+-- guard_user_privileged_columns trigger, see the 20261019120000 migration.
 
 -- Admins (Data, Regisjef, Romsjef) can update any user profile
 -- This uses a subquery to check the caller's role.
@@ -331,17 +333,34 @@ CREATE POLICY "Authenticated users can read assignments"
   TO authenticated
   USING (true);
 
--- Users can insert their own assignments (join task, log hours)
+-- Users can insert their own pending assignments (join task, log hours)
 CREATE POLICY "Users can insert own assignments"
   ON work_assignments FOR INSERT
   TO authenticated
-  WITH CHECK (auth.uid() = user_uuid);
+  WITH CHECK (
+    auth.uid() = user_uuid
+    AND approved_state = 0
+    AND approved_by_uuid IS NULL
+    AND approval_comment IS NULL
+  );
 
--- Users can delete their own assignments (leave task)
+-- Users can delete their own pending assignments (leave task)
 CREATE POLICY "Users can delete own assignments"
   ON work_assignments FOR DELETE
   TO authenticated
-  USING (auth.uid() = user_uuid);
+  USING (auth.uid() = user_uuid AND approved_state = 0);
+
+-- Users can update their own pending assignments (submit task completion)
+CREATE POLICY "Users can update own pending assignments"
+  ON work_assignments FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_uuid AND approved_state = 0)
+  WITH CHECK (
+    auth.uid() = user_uuid
+    AND approved_state = 0
+    AND approved_by_uuid IS NULL
+    AND approval_comment IS NULL
+  );
 
 -- Managers can insert assignments for anyone
 CREATE POLICY "Managers can insert any assignment"

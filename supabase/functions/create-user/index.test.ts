@@ -99,11 +99,11 @@ describe('create-user', () => {
 
     const response = await (
       await load()
-    )(post({ ...NEW_RESIDENT, role: 'Admin', roomNumber: 214, seniority: 3 }));
+    )(post({ ...NEW_RESIDENT, role: 'Vaktsjef', roomNumber: 214, seniority: 3 }));
 
     expect(response.status).toBe(200);
     expect(fake.profiles.find((p) => p.email === NEW_RESIDENT.email)).toMatchObject({
-      role_id: 1,
+      role_id: 4,
       room_number: 214,
       seniority: 3,
       school_id: 'school-annet',
@@ -157,5 +157,27 @@ describe('create-user', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     expect((await (await load())(post(NEW_RESIDENT))).status).toBe(200);
+  });
+
+  it('only lets Admin and Data hand out management roles', async () => {
+    for (const [callerRole, role, expected] of [
+      ['Romsjef', 'Romsjef', 403],
+      ['Romsjef', 'Data', 403],
+      ['Romsjef', 'Admin', 403],
+      ['Romsjef', 'Vaktsjef', 200],
+      ['Data', 'Romsjef', 200],
+      ['Data', 'Admin', 403],
+      ['Admin', 'Admin', 200],
+    ] as const) {
+      fake = createFakeSupabase({ callerId: 'caller', callerRole });
+
+      const response = await (await load())(post({ ...NEW_RESIDENT, role }));
+
+      expect(response.status, `${callerRole} adding ${role}`).toBe(expected);
+      if (expected === 403) {
+        expect(await response.text()).toBe(`Du kan ikke tildele rollen ${role}`);
+        expect(fake.log).not.toContain('insert users');
+      }
+    }
   });
 });

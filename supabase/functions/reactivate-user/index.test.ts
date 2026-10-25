@@ -139,4 +139,23 @@ describe('reactivate-user', () => {
       expect.objectContaining({ user_id: 'resident', kind: 'reactivated', actor_id: 'romsjef' }),
     ]);
   });
+
+  it('keeps Romsjef from reactivating someone who holds a management role', async () => {
+    for (const [roleId, expected] of [
+      [3, 403], // Data
+      [7, 200], // an ordinary resident
+    ] as const) {
+      fake = createFakeSupabase({
+        callerId: 'romsjef',
+        callerRole: 'Romsjef',
+        profiles: [{ ...RESIDENT, role_id: roleId }],
+        logins: [{ id: 'resident', email: 'kari@example.no', banned: true }],
+      });
+
+      const response = await (await load())(post({ userId: 'resident' }));
+
+      expect(response.status, `role ${roleId}`).toBe(expected);
+      expect(fake.profiles.find((p) => p.id === 'resident')?.is_active).toBe(expected === 200);
+    }
+  });
 });

@@ -9,14 +9,9 @@ export const roomManagementRoles: UserRole[] = [
 export const canAccessRoomManagement = (role?: string) =>
   isUserRole(role) && roomManagementRoles.includes(role);
 
-// Who may add, move out and reactivate residents. The same list as the edge functions and the
-// database (is_user_manager): the room managers, plus Regisjef.
-export const residentManagementRoles: UserRole[] = [
-  USER_ROLES.ADMIN,
-  USER_ROLES.DATA,
-  USER_ROLES.ROOMMANAGER,
-  USER_ROLES.WORKMANAGER,
-];
+// Who may add, move out and reactivate residents: the same list as the edge functions and the
+// database (is_user_manager), which is also who manages rooms.
+export const residentManagementRoles: UserRole[] = roomManagementRoles;
 
 export const canManageResidents = (role?: string) =>
   isUserRole(role) && residentManagementRoles.includes(role);

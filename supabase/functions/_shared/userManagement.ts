@@ -7,12 +7,24 @@ export const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-// Who may add, deactivate and reactivate residents. Keep in step with roomManagementRoles in
-// src/features/users/permissions.ts (Admin, Romsjef, Data), plus Regisjef, who could already.
-export const USER_MANAGER_ROLES = ['Admin', 'Data', 'Romsjef', 'Regisjef'];
+// Who may add, move out and reactivate residents. Keep in step with residentManagementRoles in
+// src/features/users/permissions.ts and with is_user_manager() in the database.
+export const USER_MANAGER_ROLES = ['Admin', 'Data', 'Romsjef'];
 
 export const canManageUsers = (role?: string | null): boolean =>
   Boolean(role) && USER_MANAGER_ROLES.includes(role as string);
+
+// Roles that grant management access; only Admin and Data may hand these out, or move out someone
+// who holds them. Keep in step with can_manage_role() in the database.
+const PRIVILEGED_ROLES = ['Admin', 'Data', 'Regisjef', 'Romsjef', 'Daglig leder'];
+
+// Whether the caller may create, move out or reactivate a user holding targetRole.
+export const canManageRole = (callerRole: string, targetRole: string): boolean => {
+  if (callerRole === 'Admin') return true;
+  if (targetRole === 'Admin') return false;
+  if (callerRole === 'Data') return true;
+  return !PRIVILEGED_ROLES.includes(targetRole);
+};
 
 // Moving a resident out bans their login (see offboard_user_internal) instead of deleting it, so they
 // cannot sign in again, with a password or through Microsoft, until reactivated.

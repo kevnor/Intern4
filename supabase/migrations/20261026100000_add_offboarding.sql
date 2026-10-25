@@ -3,7 +3,8 @@
 
 alter table public.users add column if not exists move_out_date date;
 
--- The people who may add, move out and reactivate residents. The edge functions use the same list.
+-- The people who may add, move out and reactivate residents. The edge functions and the app use the
+-- same list (Admin, Data, Romsjef).
 create or replace function public.is_user_manager()
 returns boolean
 language sql
@@ -16,12 +17,44 @@ as $function$
     from public.users u
     join public.roles r on r.id = u.role_id
     where u.id = auth.uid()
-      and r.name in ('Admin', 'Data', 'Romsjef', 'Regisjef')
+      and r.name in ('Admin', 'Data', 'Romsjef')
   );
 $function$;
 
 revoke execute on function public.is_user_manager() from public, anon;
 grant execute on function public.is_user_manager() to authenticated;
+
+-- Whether the caller may move out (or add, or reactivate) someone who holds p_target_role. Only Admin
+-- and Data touch a management role, and only Admin touches an Admin. The same rule as canManageRole in
+-- the edge functions; it is repeated here because plan_move_out is called straight from the app.
+create or replace function public.can_manage_role(p_target_role text)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path to 'public'
+as $function$
+declare
+  v_caller text := public.current_user_role_name();
+begin
+  if v_caller is null then
+    return false;
+  end if;
+  if v_caller = 'Admin' then
+    return true;
+  end if;
+  if p_target_role = 'Admin' then
+    return false;
+  end if;
+  if v_caller = 'Data' then
+    return true;
+  end if;
+  return p_target_role not in ('Admin', 'Data', 'Regisjef', 'Romsjef', 'Daglig leder');
+end;
+$function$;
+
+revoke execute on function public.can_manage_role(text) from public, anon;
+grant execute on function public.can_manage_role(text) to authenticated;
 
 -- ---------------------------------------------------------------------------------------------
 -- Log
@@ -271,6 +304,9 @@ begin
   if v_role = 'Admin' then
     raise exception 'En administrator kan ikke flyttes ut';
   end if;
+  if not public.can_manage_role(v_role) then
+    raise exception 'Du kan ikke flytte ut brukere med rollen %', v_role;
+  end if;
   if v_active is not true then
     raise exception 'Beboeren er allerede flyttet ut';
   end if;
@@ -302,12 +338,22 @@ set search_path to 'public'
 as $function$
 declare
   v_date date;
+  v_role text;
 begin
   if not public.is_user_manager() then
     raise exception 'Du har ikke tilgang til å endre utflyttinger';
   end if;
 
-  select move_out_date into v_date from public.users where id = p_user_id;
+  select u.move_out_date, r.name into v_date, v_role
+  from public.users u
+  join public.roles r on r.id = u.role_id
+  where u.id = p_user_id;
+  if not found then
+    raise exception 'Fant ikke beboeren';
+  end if;
+  if not public.can_manage_role(v_role) then
+    raise exception 'Du kan ikke endre utflyttingen til brukere med rollen %', v_role;
+  end if;
   if v_date is null then
     raise exception 'Det er ingen planlagt utflytting';
   end if;

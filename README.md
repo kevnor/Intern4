@@ -149,7 +149,7 @@ residents' passwords still exist until the login policy changes.
 
 ### Adding a resident
 
-Romsjef (or Data, Regisjef, Admin) adds the resident with **Ny bruker**, using the email of their
+Romsjef (or Data, Admin) adds the resident with **Ny bruker**, using the email of their
 Microsoft account. The dialog that follows gives a ready-made welcome message with the login link, to
 paste into mail or chat. While email and password is on, it also shows the temporary password, once;
 with `VITE_LOCAL_LOGIN_ENABLED=false` there is no password to hand over. The first Microsoft sign-in
@@ -279,7 +279,9 @@ planned date: future Vakt shifts become open gaps (and open swaps are cancelled)
 in a running romslipp, a position role (Daglig leder, Data, Regisjef, Romsjef, Utvalgsmedlem, Vaktsjef)
 is reset to Halv/Halv, the room is freed, the login is banned (the resident cannot sign in again, with
 a password or through Microsoft, until reactivated) and a `moved_out` line is written to
-`resident_events`. An Admin cannot be moved out.
+`resident_events`. An Admin cannot be moved out, and only Admin and Data move out (or add, or
+reactivate) someone who holds a management role (`can_manage_role` in the database, `canManageRole` in
+the functions).
 
 A planned date (`users.move_out_date`) is picked up by the `offboard-due-users` job, which `pg_cron`
 runs every hour; the date is checked by the Oslo clock. On a hosted project `pg_cron` is enabled by the

@@ -303,7 +303,7 @@ describe('ResidentDirectoryPage', () => {
       { ...activeResidents[0], moveOutDate: '2099-06-30' },
     ]);
 
-    asRole('Regisjef');
+    asRole('Romsjef');
     const { unmount } = renderPage('/beboere');
     await screen.findByRole('table');
     expect(screen.getAllByText('Flytter ut 30.06.2099').length).toBeGreaterThan(0);
