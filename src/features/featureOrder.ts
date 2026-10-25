@@ -11,6 +11,7 @@ export const FEATURE_ORDER = [
   'helga',
   'users',
   'reception',
+  'admin',
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_ORDER)[number];

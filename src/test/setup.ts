@@ -67,4 +67,5 @@ vi.mock('../server/dao/offboardingDAO', () => ({
   planMoveOut: vi.fn().mockResolvedValue(undefined),
   cancelMoveOut: vi.fn().mockResolvedValue(undefined),
   getResidentEvents: vi.fn().mockResolvedValue([]),
+  getRecentResidentEvents: vi.fn().mockResolvedValue({ events: [], hasMore: false }),
 }));

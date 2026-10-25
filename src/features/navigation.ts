@@ -1,4 +1,5 @@
 import type { FeatureNavItem } from '../shared/types/feature';
+import { adminNavigation } from './admin/navigation';
 import { alcoholNavigation } from './alcohol/navigation';
 import { FEATURE_ORDER, type FeatureKey } from './featureOrder';
 import { helgaNavigation } from './helga/navigation';
@@ -13,6 +14,7 @@ import { vervNavigation } from './verv/navigation';
 import { wineCellarNavigation } from './wine-cellar/navigation';
 
 const navigationByFeature: Partial<Record<FeatureKey, FeatureNavItem[]>> = {
+  admin: adminNavigation,
   alcohol: alcoholNavigation,
   helga: helgaNavigation,
   reception: receptionNavigation,

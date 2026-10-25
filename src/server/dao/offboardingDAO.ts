@@ -3,6 +3,7 @@ import type {
   OffboardingPreview,
   ResidentEvent,
   ResidentEventKind,
+  ResidentFeedEvent,
 } from '../../features/residents/offboarding';
 
 type Relation<T> = T | T[] | null | undefined;
@@ -12,6 +13,8 @@ const first = <T>(relation: Relation<T>): T | undefined =>
 
 type EventRow = {
   id: string;
+  user_id?: string;
+  subject?: Relation<{ name?: string | null }>;
   kind: ResidentEventKind;
   reason: string | null;
   details: Record<string, unknown> | null;
@@ -71,4 +74,35 @@ export async function getResidentEvents(userId: string): Promise<ResidentEvent[]
     details: row.details ?? {},
     createdAt: new Date(row.created_at),
   }));
+}
+
+// The log for everyone, newest first, one page at a time. Asks for one more than the page so it
+// knows whether there is another page.
+export async function getRecentResidentEvents(
+  limit: number,
+  offset = 0
+): Promise<{ events: ResidentFeedEvent[]; hasMore: boolean }> {
+  const { data, error } = await supabase
+    .from('resident_events')
+    .select(
+      'id, user_id, kind, reason, details, created_at, subject:users!user_id(name), actor:users!actor_id(name)'
+    )
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit);
+  if (error) throw new Error(`Could not get the history: ${error.message}`);
+
+  const rows = (data ?? []) as unknown as EventRow[];
+  return {
+    hasMore: rows.length > limit,
+    events: rows.slice(0, limit).map((row) => ({
+      id: row.id,
+      userId: row.user_id ?? '',
+      residentName: first(row.subject)?.name ?? 'Ukjent',
+      kind: row.kind,
+      actorName: first(row.actor)?.name ?? null,
+      reason: row.reason,
+      details: row.details ?? {},
+      createdAt: new Date(row.created_at),
+    })),
+  };
 }

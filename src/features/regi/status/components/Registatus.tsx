@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useAuth } from '../../../../app/providers/AuthContext';
 import { canApproveWork } from '../../permissions';
-import { USER_ROLES } from '../../../../shared/types/roles';
+import { canSetSemesterHours } from '../../../admin/permissions';
 import SemesterHoursCard from './SemesterHoursCard';
 import { RegistatusRow, useRegistatus } from '../hooks/useRegistatus';
 import {
@@ -116,7 +116,7 @@ const Registatus: React.FC<RegistatusProps> = ({ onGrant }) => {
 
   return (
     <div className="space-y-4">
-      {user.role === USER_ROLES.ADMIN && <SemesterHoursCard onSaved={() => void load()} />}
+      {canSetSemesterHours(user.role) && <SemesterHoursCard onSaved={() => void load()} />}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <SearchInput
           value={query}
