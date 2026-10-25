@@ -1,11 +1,13 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
+  canManageRole,
   canManageUsers,
   corsHeaders,
   generatePassword,
   isNotFoundError,
   jsonResponse,
+  recordResidentEvent,
   textResponse,
 } from '../_shared/userManagement.ts';
 
@@ -50,7 +52,8 @@ Deno.serve(
       return textResponse('Unable to verify role', 500);
     }
 
-    if (!canManageUsers(roleRow?.roles?.name as string | undefined)) {
+    const myRole = roleRow?.roles?.name as string | undefined;
+    if (!canManageUsers(myRole)) {
       return textResponse('Forbidden', 403);
     }
 
@@ -63,7 +66,7 @@ Deno.serve(
 
     const { data: profile, error: profileErr } = await adminClient
       .from('users')
-      .select('id, email, name, is_active')
+      .select('id, email, name, is_active, roles(name)')
       .eq('id', body.userId)
       .maybeSingle();
 
@@ -72,6 +75,12 @@ Deno.serve(
     }
     if (!profile?.email) {
       return textResponse('Fant ikke beboeren', 404);
+    }
+
+    // The same rule as for moving out: only Admin and Data touch someone who holds a management role.
+    const targetRoleName = (profile.roles as { name?: string } | null | undefined)?.name ?? '';
+    if (!canManageRole(myRole as string, targetRoleName)) {
+      return textResponse(`Du kan ikke reaktivere brukere med rollen ${targetRoleName}`, 403);
     }
 
     // Active again first: a new login is only created for an active profile, and a ban lifted
@@ -104,6 +113,12 @@ Deno.serve(
         return textResponse(unbanErr.message, 400);
       }
 
+      await recordResidentEvent(adminClient, {
+        userId: profile.id,
+        kind: 'reactivated',
+        actorId: me.user.id,
+      });
+
       return jsonResponse({ success: true });
     }
 
@@ -123,6 +138,13 @@ Deno.serve(
       await adminClient.from('users').update({ is_active: false }).eq('id', profile.id);
       return textResponse(createErr.message, 400);
     }
+
+    await recordResidentEvent(adminClient, {
+      userId: profile.id,
+      kind: 'reactivated',
+      actorId: me.user.id,
+      details: { loginRecreated: true },
+    });
 
     return jsonResponse({ success: true, initialPassword: password, email: profile.email });
   }

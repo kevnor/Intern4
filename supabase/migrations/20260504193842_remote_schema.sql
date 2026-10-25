@@ -939,15 +939,10 @@ with check ((EXISTS ( SELECT 1
   WHERE ((u.id = auth.uid()) AND (r.name = ANY (ARRAY['Admin'::text, 'Data'::text, 'Regisjef'::text]))))));
 
 
-drop trigger if exists "objects_delete_delete_prefix" on "storage"."objects";
-
-drop trigger if exists "objects_insert_create_prefix" on "storage"."objects";
-
-drop trigger if exists "objects_update_create_prefix" on "storage"."objects";
-
-drop trigger if exists "prefixes_create_hierarchy" on "storage"."prefixes";
-
-drop trigger if exists "prefixes_delete_hierarchy" on "storage"."prefixes";
+-- The dump also dropped Supabase's own storage triggers (objects_*_prefix, prefixes_*_hierarchy). They
+-- belong to the storage service, not to this app, and the last two fail on a fresh database where
+-- storage.prefixes does not exist yet, so a new setup (or CI) could not apply the migrations.
+-- Removed; nothing here depended on them being dropped.
 
 
   create policy "users can delete own images"

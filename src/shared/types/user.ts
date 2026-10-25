@@ -23,6 +23,8 @@ const UserSchema = z.object({
   role: z.string(),
   onLeave: z.boolean(),
   isActive: z.boolean(),
+  // A planned move-out, as a calendar day ('YYYY-MM-DD').
+  moveOutDate: z.string().optional(),
   createdAt: z.date(),
 });
 
@@ -88,6 +90,7 @@ export type ResidentDirectoryUser = {
   role?: string;
   onLeave: boolean;
   isActive: boolean;
+  moveOutDate?: string;
   address: {
     street: string;
     postalCode: string;

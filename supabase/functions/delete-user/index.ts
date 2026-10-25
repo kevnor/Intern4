@@ -1,16 +1,17 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
-  BAN_DURATION,
+  canManageRole,
   canManageUsers,
   corsHeaders,
-  isNotFoundError,
   jsonResponse,
   textResponse,
 } from '../_shared/userManagement.ts';
 
-// Deactivates a resident. Their login is banned rather than deleted, so they cannot sign in again
-// (with a password or through Microsoft) until they are reactivated, and the history stays intact.
+// Moves a resident out right away. Who may do it is decided here; what it does (release future
+// shifts, skip them in a running romslipp, reset a position role, free the room, ban the login and
+// log it) is one database function, offboard_user_internal, shared with the planned-date job. The
+// login is banned rather than deleted, so they cannot sign in again until they are reactivated.
 Deno.serve(
   async (req: {
     method: string;
@@ -56,7 +57,10 @@ Deno.serve(
       return textResponse('Forbidden', 403);
     }
 
-    const body = (await req.json().catch(() => null)) as { userId: string } | null;
+    const body = (await req.json().catch(() => null)) as {
+      userId: string;
+      reason?: string;
+    } | null;
     if (!body?.userId) {
       return textResponse('Bad Request: userId required', 400);
     }
@@ -67,39 +71,39 @@ Deno.serve(
 
     const adminClient = createClient(supabaseUrl, serviceKey);
 
-    // Prevent deactivation of admin users
-    const { data: targetRole } = await adminClient
+    const { data: target, error: targetErr } = await adminClient
       .from('users')
       .select('roles(name)')
       .eq('id', body.userId)
       .maybeSingle();
 
-    const targetRoleName = (targetRole?.roles as { name?: string } | null | undefined)?.name;
+    if (targetErr) {
+      return textResponse('Unable to look up user', 500);
+    }
+
+    if (!target) {
+      return textResponse('Fant ikke brukeren', 404);
+    }
+
+    const targetRoleName = (target.roles as { name?: string } | null | undefined)?.name ?? '';
     if (targetRoleName === 'Admin') {
       return textResponse('Kan ikke deaktivere admin-brukere', 403);
     }
 
-    // Ban the login. Older residents may have no login at all (it used to be deleted), which is fine.
-    const { error: banErr } = await adminClient.auth.admin.updateUserById(body.userId, {
-      ban_duration: BAN_DURATION,
+    if (!canManageRole(myRole, targetRoleName)) {
+      return textResponse(`Du kan ikke flytte ut brukere med rollen ${targetRoleName}`, 403);
+    }
+
+    const { data: details, error: offboardErr } = await adminClient.rpc('offboard_user_internal', {
+      p_user_id: body.userId,
+      p_reason: body.reason ?? null,
+      p_actor_id: me.user.id,
     });
 
-    if (banErr && !isNotFoundError(banErr)) {
-      return textResponse(banErr.message, 400);
+    if (offboardErr) {
+      return textResponse(offboardErr.message, 400);
     }
 
-    const { error: profileErr } = await adminClient
-      .from('users')
-      .update({
-        is_active: false,
-        on_leave: false,
-      })
-      .eq('id', body.userId);
-
-    if (profileErr) {
-      return textResponse(profileErr.message, 400);
-    }
-
-    return jsonResponse({ success: true });
+    return jsonResponse({ success: true, ...(details ?? {}) });
   }
 );

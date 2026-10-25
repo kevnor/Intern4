@@ -17,26 +17,42 @@ afterEach(() => {
 });
 
 describe('delete-user', () => {
-  it('bans the login instead of deleting it, and deactivates the profile', async () => {
+  it('moves the resident out through the database function, which bans the login', async () => {
     fake = createFakeSupabase({
       callerId: 'romsjef',
       callerRole: 'Romsjef',
       profiles: [RESIDENT],
       logins: [LOGIN],
+      offboardDetails: { shiftsReleased: 3, romslippSkipped: 1, roleReset: null },
     });
 
-    const response = await (await load())(post({ userId: 'resident' }));
+    const response = await (await load())(post({ userId: 'resident', reason: ' Ferdig ' }));
 
     expect(response.status).toBe(200);
-    expect(fake.logins.get('resident')?.banned).toBe(true);
+    expect(await response.json()).toEqual({
+      success: true,
+      shiftsReleased: 3,
+      romslippSkipped: 1,
+      roleReset: null,
+    });
+    expect(fake.log).toContain('rpc offboard_user_internal');
     expect(fake.log).not.toContain('delete login');
+    expect(fake.logins.get('resident')?.banned).toBe(true);
     expect(fake.profiles.find((p) => p.id === 'resident')).toMatchObject({
       is_active: false,
       on_leave: false,
     });
+    expect(fake.events).toEqual([
+      expect.objectContaining({
+        user_id: 'resident',
+        kind: 'moved_out',
+        actor_id: 'romsjef',
+        reason: 'Ferdig',
+      }),
+    ]);
   });
 
-  it('still deactivates a resident whose login no longer exists', async () => {
+  it('still moves out a resident whose login no longer exists', async () => {
     fake = createFakeSupabase({
       callerId: 'romsjef',
       callerRole: 'Romsjef',
@@ -49,19 +65,19 @@ describe('delete-user', () => {
     expect(fake.profiles.find((p) => p.id === 'resident')?.is_active).toBe(false);
   });
 
-  it('leaves the profile alone when the ban fails', async () => {
+  it('passes the database error on and leaves the resident active', async () => {
     fake = createFakeSupabase({
       callerId: 'romsjef',
       callerRole: 'Romsjef',
       profiles: [RESIDENT],
       logins: [LOGIN],
-      failures: { ban: 'Auth service down' },
+      failures: { offboard: 'Noe gikk galt' },
     });
 
     const response = await (await load())(post({ userId: 'resident' }));
 
     expect(response.status).toBe(400);
-    expect(await response.text()).toBe('Auth service down');
+    expect(await response.text()).toBe('Noe gikk galt');
     expect(fake.profiles.find((p) => p.id === 'resident')?.is_active).toBe(true);
   });
 
@@ -80,9 +96,10 @@ describe('delete-user', () => {
     expect(fake.profiles.find((p) => p.id === 'boss')?.is_active).toBe(true);
   });
 
-  it('lets Romsjef, Data, Regisjef and Admin do it, but nobody else', async () => {
+  it('lets Romsjef, Data and Admin do it, but nobody else', async () => {
     for (const [role, expected] of [
       ['Admin', 200],
+      ['Data', 200],
       ['Romsjef', 200],
       ['Halv/Halv', 403],
     ] as const) {
@@ -101,5 +118,46 @@ describe('delete-user', () => {
     fake = createFakeSupabase({ callerId: 'romsjef', callerRole: 'Romsjef' });
 
     expect((await (await load())(post({}))).status).toBe(400);
+  });
+
+  it('keeps Romsjef from moving out someone who holds a management role', async () => {
+    for (const [targetRoleId, expected] of [
+      [3, 403], // Data
+      [2, 403], // another Romsjef
+      [4, 200], // Vaktsjef
+      [7, 200], // an ordinary resident
+    ] as const) {
+      fake = createFakeSupabase({
+        callerId: 'romsjef',
+        callerRole: 'Romsjef',
+        profiles: [{ ...RESIDENT, role_id: targetRoleId }],
+        logins: [LOGIN],
+      });
+
+      const response = await (await load())(post({ userId: 'resident' }));
+
+      expect(response.status, `role ${targetRoleId}`).toBe(expected);
+      expect(fake.profiles.find((p) => p.id === 'resident')?.is_active).toBe(expected !== 200);
+    }
+  });
+
+  it('lets Data move out a Romsjef', async () => {
+    fake = createFakeSupabase({
+      callerId: 'data',
+      callerRole: 'Data',
+      profiles: [{ ...RESIDENT, role_id: 2 }],
+      logins: [LOGIN],
+    });
+
+    expect((await (await load())(post({ userId: 'resident' }))).status).toBe(200);
+  });
+
+  it('says so when the resident does not exist', async () => {
+    fake = createFakeSupabase({ callerId: 'romsjef', callerRole: 'Romsjef' });
+
+    const response = await (await load())(post({ userId: 'ghost' }));
+
+    expect(response.status).toBe(404);
+    expect(fake.log).not.toContain('rpc offboard_user_internal');
   });
 });

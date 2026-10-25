@@ -1,17 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
-  BAN_DURATION,
   USER_MANAGER_ROLES,
+  canManageRole,
   canManageUsers,
+  escapeLikePattern,
   generatePassword,
   isNotFoundError,
   jsonResponse,
+  recordResidentEvent,
   textResponse,
 } from './userManagement';
 
 describe('canManageUsers', () => {
-  it('allows Admin, Data, Romsjef and Regisjef', () => {
-    for (const role of ['Admin', 'Data', 'Romsjef', 'Regisjef']) {
+  it('allows Admin, Data and Romsjef', () => {
+    for (const role of ['Admin', 'Data', 'Romsjef']) {
       expect(canManageUsers(role)).toBe(true);
     }
   });
@@ -19,6 +21,7 @@ describe('canManageUsers', () => {
   it('rejects everyone else, including the old misspelt role name', () => {
     expect(canManageUsers('Halv/Halv')).toBe(false);
     expect(canManageUsers('Vaktsjef')).toBe(false);
+    expect(canManageUsers('Regisjef')).toBe(false);
     expect(canManageUsers('Data Åpmand')).toBe(false);
     expect(canManageUsers(undefined)).toBe(false);
     expect(canManageUsers(null)).toBe(false);
@@ -27,8 +30,29 @@ describe('canManageUsers', () => {
 
   it('matches the roles that can reach the "Ny bruker" button in the app', () => {
     // roomManagementRoles in src/features/users/permissions.ts
-    for (const role of ['Admin', 'Romsjef', 'Data']) {
-      expect(USER_MANAGER_ROLES).toContain(role);
+    expect([...USER_MANAGER_ROLES].sort()).toEqual(['Admin', 'Data', 'Romsjef']);
+  });
+});
+
+describe('canManageRole', () => {
+  it('lets Admin manage anyone', () => {
+    for (const target of ['Admin', 'Data', 'Romsjef', 'Halv/Halv']) {
+      expect(canManageRole('Admin', target)).toBe(true);
+    }
+  });
+
+  it('lets Data manage anyone except an Admin', () => {
+    expect(canManageRole('Data', 'Romsjef')).toBe(true);
+    expect(canManageRole('Data', 'Halv/Halv')).toBe(true);
+    expect(canManageRole('Data', 'Admin')).toBe(false);
+  });
+
+  it('keeps Romsjef to ordinary residents and the roles that carry no management access', () => {
+    for (const target of ['Halv/Halv', 'Full Vakt', 'Full Regi', 'Vaktsjef', 'Utvalgsmedlem']) {
+      expect(canManageRole('Romsjef', target)).toBe(true);
+    }
+    for (const target of ['Admin', 'Data', 'Regisjef', 'Romsjef', 'Daglig leder']) {
+      expect(canManageRole('Romsjef', target)).toBe(false);
     }
   });
 });
@@ -76,8 +100,45 @@ describe('responses and ban duration', () => {
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
   });
 
-  it('bans for about a hundred years, in the unit the auth API wants', () => {
-    expect(BAN_DURATION).toMatch(/^\d+h$/);
-    expect(Number.parseInt(BAN_DURATION, 10)).toBeGreaterThan(24 * 365 * 50);
+  it('escapes the wildcards of a LIKE pattern, so an address matches only itself', () => {
+    expect(escapeLikePattern('kari_nordmann@example.no')).toBe('kari\\_nordmann@example.no');
+    expect(escapeLikePattern('100%\\')).toBe('100\\%\\\\');
+  });
+});
+
+describe('recordResidentEvent', () => {
+  const clientThatReturns = (error: { message: string } | null) => {
+    const rows: Record<string, unknown>[] = [];
+    return {
+      rows,
+      from: (table: string) => ({
+        insert: async (row: Record<string, unknown>) => {
+          rows.push({ table, ...row });
+          return { error };
+        },
+      }),
+    };
+  };
+
+  it('writes the event to the log', async () => {
+    const client = clientThatReturns(null);
+
+    await recordResidentEvent(client, { userId: 'u1', kind: 'added', actorId: 'm1' });
+
+    expect(client.rows).toEqual([
+      { table: 'resident_events', user_id: 'u1', kind: 'added', actor_id: 'm1', details: {} },
+    ]);
+  });
+
+  it('reports a failure without throwing, because the action itself has already happened', async () => {
+    const client = clientThatReturns({ message: 'permission denied' });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(
+      recordResidentEvent(client, { userId: 'u1', kind: 'reactivated', actorId: 'm1' })
+    ).resolves.toBeUndefined();
+
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('permission denied'));
+    spy.mockRestore();
   });
 });

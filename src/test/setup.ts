@@ -53,3 +53,18 @@ vi.mock('../server/dao/romslippDAO', () => ({
   closeRomslipp: vi.fn().mockResolvedValue(undefined),
   cancelRomslipp: vi.fn().mockResolvedValue(undefined),
 }));
+
+// No history, and a move-out that changes nothing.
+vi.mock('../server/dao/offboardingDAO', () => ({
+  getOffboardingPreview: vi.fn().mockResolvedValue({
+    roomNumber: null,
+    futureShifts: 0,
+    openSwaps: 0,
+    waitingRomslipp: 0,
+    openReports: 0,
+    roleReset: null,
+  }),
+  planMoveOut: vi.fn().mockResolvedValue(undefined),
+  cancelMoveOut: vi.fn().mockResolvedValue(undefined),
+  getResidentEvents: vi.fn().mockResolvedValue([]),
+}));

@@ -1,0 +1,138 @@
+name: Security
+
+# Dependency audit, secret scanning, static analysis and database checks. Findings of high or
+# critical severity fail the run; anything lower is reported in the job summary. See the README
+# ("Security checks") for how to run each check locally.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Mondays, so a new advisory shows up even when nobody has pushed.
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      # npm audit reads package-lock.json, so nothing needs installing (and no install scripts run).
+      - name: Production dependencies (fails on high or critical)
+        run: npm run security:audit
+
+      # Dev tooling never ships, so this only reports. Dependabot proposes the upgrades.
+      - name: Development dependencies (report only)
+        continue-on-error: true
+        run: |
+          {
+            echo '### npm audit, all dependencies'
+            echo '```'
+            npm audit --audit-level=high || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      # sha256 of gitleaks_8.30.1_linux_x64.tar.gz, from the release's asset digest.
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check --strict -
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          tar -xzf gitleaks.tar.gz -C "$RUNNER_TEMP/gitleaks" gitleaks
+          rm gitleaks.tar.gz
+
+      # A pull request is scanned for the commits it adds; main and the weekly run scan everything.
+      - name: Scan the commits in this pull request
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          "$RUNNER_TEMP/gitleaks/gitleaks" git --no-banner --redact --verbose \
+            --config .gitleaks.toml --log-opts="${BASE_SHA}..${HEAD_SHA}"
+
+      - name: Scan the whole history
+        if: github.event_name != 'pull_request'
+        run: |
+          "$RUNNER_TEMP/gitleaks/gitleaks" git --no-banner --redact --verbose \
+            --config .gitleaks.toml
+
+  codeql:
+    name: Code analysis (CodeQL)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:javascript-typescript
+
+  database:
+    name: Database checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The CLI version these migrations and checks were tried with. Dependabot does not bump this one.
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.122.0
+
+      # Starting the stack applies every migration, so a migration that does not apply fails here.
+      # Auth and storage stay on because their schemas are what some migrations refer to.
+      - name: Start local Supabase
+        run: >
+          supabase start
+          -x realtime,imgproxy,mailpit,studio,edge-runtime,logflare,vector,supavisor,postgres-meta
+
+      - name: Schema security check
+        run: npm run security:db
+
+      - name: Lint the database functions
+        run: supabase db lint --local --level warning --fail-on error
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup

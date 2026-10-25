@@ -9,6 +9,13 @@ export const roomManagementRoles: UserRole[] = [
 export const canAccessRoomManagement = (role?: string) =>
   isUserRole(role) && roomManagementRoles.includes(role);
 
+// Who may add, move out and reactivate residents: the same list as the edge functions and the
+// database (is_user_manager), which is also who manages rooms.
+export const residentManagementRoles: UserRole[] = roomManagementRoles;
+
+export const canManageResidents = (role?: string) =>
+  isUserRole(role) && residentManagementRoles.includes(role);
+
 // Mirrors the database guard (guard_user_privileged_columns) and the edge functions'
 // shared rules: only Admin and Data change roles, and only Admin grants or removes Admin.
 export const canAssignRoles = (callerRole?: string) =>

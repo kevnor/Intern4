@@ -5,7 +5,7 @@ import { getResidentDirectoryUsers, reactivateUser } from '../../../server/dao/u
 import { useAuth } from '../../../app/providers/AuthContext';
 import { PageLayout } from '../../../shared/layouts';
 import { ResidentDirectoryUser } from '../../../shared/types/user';
-import { formatDate } from '../../../shared/utils/date';
+import { formatDate, formatDeadline } from '../../../shared/utils/date';
 import { formatPhoneDisplay, toPhoneHref } from '../../../shared/utils/phone';
 import { cn } from '../../../shared/utils/cn';
 import {
@@ -36,7 +36,7 @@ import NewUserModal, { CreatedUser } from '../components/NewUserModal';
 import CreatedUserDialog from '../components/CreatedUserDialog';
 import { useProfilePictureUrls } from '../hooks/useProfilePictureUrls';
 import { useUserAdminLookups } from '../hooks/useUserAdminLookups';
-import { canAccessRoomManagement } from '../../users/permissions';
+import { canAccessRoomManagement, canManageResidents } from '../../users/permissions';
 import { lazyWithRetry } from '../../../app/lazyWithRetry';
 
 // The charts library is large, so it only loads when Statistikk is opened.
@@ -61,12 +61,20 @@ const SORT_OPTIONS: { value: ResidentSortKey; label: string }[] = [
 const stretchedLinkClasses =
   'after:absolute after:inset-0 after:rounded-2xl focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-ring';
 
+// A planned move-out is only shown to the people who manage residents.
+const MoveOutBadge = ({ resident }: { resident: ResidentDirectoryUser }) =>
+  resident.moveOutDate ? (
+    <Badge tone="warning">Flytter ut {formatDeadline(resident.moveOutDate)}</Badge>
+  ) : null;
+
 const ResidentCard = ({
   resident,
   photoUrl,
+  showMoveOut,
 }: {
   resident: ResidentDirectoryUser;
   photoUrl?: string;
+  showMoveOut?: boolean;
 }) => (
   <article className="relative space-y-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
     <div className="flex items-start gap-3">
@@ -83,6 +91,7 @@ const ResidentCard = ({
             <Badge tone="primary">Rom {formatRoom(resident.roomNumber)}</Badge>
           )}
           {resident.onLeave && <Badge tone="warning">Permisjon</Badge>}
+          {showMoveOut && <MoveOutBadge resident={resident} />}
         </div>
         {formatStudy(resident) !== '-' && (
           <p className="mt-0.5 text-sm text-muted">{formatStudy(resident)}</p>
@@ -101,6 +110,7 @@ const ResidentDirectoryPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isManager = canAccessRoomManagement(user?.role);
+  const showMoveOut = canManageResidents(user?.role);
   const activeTab = TABS.find((tab) => tab.path === location.pathname)?.key ?? 'list';
   const showOldResidents = activeTab === 'old';
   const showStatistics = activeTab === 'stats';
@@ -393,7 +403,11 @@ const ResidentDirectoryPage: React.FC = () => {
               emptyMessage="Ingen beboere funnet."
               bareCards
               renderCard={(resident) => (
-                <ResidentCard resident={resident} photoUrl={photoUrls[resident.id]} />
+                <ResidentCard
+                  resident={resident}
+                  photoUrl={photoUrls[resident.id]}
+                  showMoveOut={showMoveOut}
+                />
               )}
               columns={[
                 {
@@ -405,6 +419,7 @@ const ResidentDirectoryPage: React.FC = () => {
                       <Avatar name={resident.name} src={photoUrls[resident.id]} size="sm" />
                       {nameLink(resident)}
                       {resident.onLeave && <Badge tone="warning">Permisjon</Badge>}
+                      {showMoveOut && <MoveOutBadge resident={resident} />}
                     </span>
                   ),
                 },

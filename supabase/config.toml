@@ -234,7 +234,7 @@ inactivity_timeout = "2h"
 # Studio keeps working; switch it on together with the Azure provider below. On a hosted project it is
 # enabled in the dashboard (Authentication > Hooks) instead.
 [auth.hook.before_user_created]
-enabled = true
+enabled = false
 uri = "pg-functions://postgres/public/hook_before_user_created"
 
 # This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
@@ -295,7 +295,7 @@ email_optional = false
 # app (see the README), put the three values below in supabase/.env, set enabled = true and restart
 # `supabase start`. The tenant URL is https://login.microsoftonline.com/<tenant-id> (no /v2.0).
 [auth.external.azure]
-enabled = true
+enabled = false
 client_id = "env(SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_EXTERNAL_AZURE_SECRET)"
 url = "env(SUPABASE_AUTH_EXTERNAL_AZURE_URL)"

@@ -15,8 +15,19 @@ export type Profile = {
 export type AuthUser = { id: string; email: string; banned?: boolean; password?: string };
 
 type Failures = Partial<
-  Record<'profileInsert' | 'createLogin' | 'ban' | 'unban' | 'lookup', string>
+  Record<
+    'profileInsert' | 'createLogin' | 'ban' | 'unban' | 'lookup' | 'offboard' | 'event',
+    string
+  >
 >;
+
+export type ResidentEvent = {
+  user_id: string;
+  kind: string;
+  actor_id?: string | null;
+  reason?: string | null;
+  details?: Record<string, unknown>;
+};
 
 export function createFakeSupabase(options: {
   callerId: string;
@@ -25,10 +36,14 @@ export function createFakeSupabase(options: {
   logins?: AuthUser[];
   roles?: { id: number; name: string }[];
   failures?: Failures;
+  // What the offboarding function reports it did.
+  offboardDetails?: Record<string, unknown>;
 }) {
   const roles = options.roles ?? [
     { id: 1, name: 'Admin' },
     { id: 2, name: 'Romsjef' },
+    { id: 3, name: 'Data' },
+    { id: 4, name: 'Vaktsjef' },
     { id: 7, name: 'Halv/Halv' },
   ];
   // Copies, so one test changing a profile does not leak into the next.
@@ -37,6 +52,7 @@ export function createFakeSupabase(options: {
     (options.logins ?? []).map((login) => [login.id, login])
   );
   const failures = options.failures ?? {};
+  const events: ResidentEvent[] = [];
   // What happened, in order, so tests can check that the profile comes before the login.
   const log: string[] = [];
 
@@ -53,13 +69,20 @@ export function createFakeSupabase(options: {
             ? [{ id: 'school-annet', slug: 'annet' }]
             : name === 'studies'
               ? [{ id: 'study-annet', slug: 'annet' }]
-              : [];
+              : name === 'resident_events'
+                ? (events as unknown as Record<string, unknown>[])
+                : [];
     const filters: [string, unknown][] = [];
     let mode: 'select' | 'update' | 'delete' = 'select';
     let patch: Record<string, unknown> = {};
 
+    const matches = (row: Record<string, unknown>, column: string, value: unknown) =>
+      value && typeof value === 'object' && 'ilike' in value
+        ? String(row[column] ?? '').toLowerCase() === (value as { ilike: string }).ilike
+        : row[column] === value;
+
     const matching = () =>
-      rows.filter((row) => filters.every(([column, value]) => row[column] === value));
+      rows.filter((row) => filters.every(([column, value]) => matches(row, column, value)));
 
     const builder = {
       select: () => builder,
@@ -67,6 +90,13 @@ export function createFakeSupabase(options: {
         filters.push([column, value]);
         return builder;
       },
+      // Case-insensitive match of the whole value; \\ escapes % and _ like in SQL.
+      ilike: (column: string, pattern: string) => {
+        const wanted = pattern.replace(/\\([\\%_])/g, '$1').toLowerCase();
+        filters.push([column, { ilike: wanted }]);
+        return builder;
+      },
+      limit: () => builder,
       update: (values: Record<string, unknown>) => {
         mode = 'update';
         patch = values;
@@ -80,6 +110,9 @@ export function createFakeSupabase(options: {
         log.push(`insert ${name}`);
         if (name === 'users' && failures.profileInsert) {
           return { error: { message: failures.profileInsert } };
+        }
+        if (name === 'resident_events' && failures.event) {
+          return { error: { message: failures.event } };
         }
         rows.push(values);
         return { error: null };
@@ -99,6 +132,8 @@ export function createFakeSupabase(options: {
         } else if (mode === 'delete') {
           log.push(`delete ${name}`);
           for (const row of matching()) rows.splice(rows.indexOf(row), 1);
+        } else {
+          return Promise.resolve({ data: matching(), error: null }).then(resolve);
         }
         return Promise.resolve({ data: null, error: null }).then(resolve);
       },
@@ -150,6 +185,44 @@ export function createFakeSupabase(options: {
     },
   };
 
+  // Does what the offboard_user_internal database function does, as far as the edge functions can see.
+  const rpc = async (
+    name: string,
+    args: { p_user_id: string; p_reason?: string | null; p_actor_id?: string | null }
+  ) => {
+    log.push(`rpc ${name}`);
+    if (name !== 'offboard_user_internal') {
+      return { data: null, error: { message: `Unknown function ${name}` } };
+    }
+    if (failures.offboard) return { data: null, error: { message: failures.offboard } };
+
+    const profile = profiles.find((candidate) => candidate.id === args.p_user_id);
+    if (!profile) return { data: null, error: { message: 'Fant ikke beboeren' } };
+    if (roleOf(profile)?.name === 'Admin') {
+      return { data: null, error: { message: 'En administrator kan ikke flyttes ut' } };
+    }
+
+    const login = logins.get(args.p_user_id);
+    if (login) login.banned = true;
+    if (!profile.is_active) return { data: { alreadyInactive: true }, error: null };
+
+    profile.is_active = false;
+    profile.on_leave = false;
+    const details = options.offboardDetails ?? {
+      shiftsReleased: 0,
+      romslippSkipped: 0,
+      roleReset: null,
+    };
+    events.push({
+      user_id: args.p_user_id,
+      kind: 'moved_out',
+      actor_id: args.p_actor_id ?? null,
+      reason: args.p_reason?.trim() || null,
+      details,
+    });
+    return { data: details, error: null };
+  };
+
   // The client acting for the signed-in caller, and the one with the service role.
   const caller = {
     auth: { getUser: async () => ({ data: { user: { id: options.callerId } }, error: null }) },
@@ -168,8 +241,10 @@ export function createFakeSupabase(options: {
   return {
     profiles,
     logins,
+    events,
     log,
-    clientFor: (key: string) => (key === 'service-key' ? { auth: { admin }, from: table } : caller),
+    clientFor: (key: string) =>
+      key === 'service-key' ? { auth: { admin }, from: table, rpc } : caller,
   };
 }
 

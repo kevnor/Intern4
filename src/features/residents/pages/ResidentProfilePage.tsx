@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Pencil, RotateCcw, UserMinus } from 'lucide-react';
 import { useAuth } from '../../../app/providers/AuthContext';
-import { deleteUser, reactivateUser, updateUser } from '../../../server/dao/userDAO';
+import { reactivateUser, updateUser } from '../../../server/dao/userDAO';
+import { cancelMoveOut } from '../../../server/dao/offboardingDAO';
 import { PageLayout } from '../../../shared/layouts';
 import {
   Avatar,
@@ -15,7 +16,7 @@ import {
   StatusMessage,
   buttonClasses,
 } from '../../../shared/components';
-import { formatDate, formatHours } from '../../../shared/utils/date';
+import { formatDate, formatDeadline, formatHours } from '../../../shared/utils/date';
 import { formatPhoneDisplay } from '../../../shared/utils/phone';
 import { cn } from '../../../shared/utils/cn';
 import { USER_ROLES } from '../../../shared/types/roles';
@@ -24,10 +25,12 @@ import { formatAddress, formatRoom, formatStudy } from '../residentDirectory';
 import ContactActions from '../components/ContactActions';
 import EditResidentSheet from '../components/EditResidentSheet';
 import CreatedUserDialog from '../components/CreatedUserDialog';
+import OffboardDialog from '../components/OffboardDialog';
+import ResidentHistoryCard from '../components/ResidentHistoryCard';
 import type { CreatedUser } from '../components/NewUserModal';
 import { useResidentProfile, type ResidentProfile } from '../hooks/useResidentProfile';
 import { useUserAdminLookups } from '../hooks/useUserAdminLookups';
-import { canAccessRoomManagement } from '../../users/permissions';
+import { canAccessRoomManagement, canManageResidents } from '../../users/permissions';
 import { USER_PATHS } from '../../users/paths';
 import { canApproveWork } from '../../regi/permissions';
 import { REGI_PATHS } from '../../regi/paths';
@@ -69,14 +72,15 @@ const DetailList = ({ items }: { items: { label: string; value: React.ReactNode 
   </dl>
 );
 
-type PendingAction = 'leave' | 'deactivate' | 'reactivate' | null;
+type PendingAction = 'leave' | 'reactivate' | 'cancelMoveOut' | null;
 
 const ResidentProfilePage: React.FC = () => {
   const { id = '' } = useParams();
   const { user } = useAuth();
   const isManager = canAccessRoomManagement(user?.role);
   const isRegiManager = canApproveWork(user?.role);
-  const showAdmin = isManager || isRegiManager;
+  const canManage = canManageResidents(user?.role);
+  const showAdmin = isManager || isRegiManager || canManage;
   const { profile, photoUrl, logs, loading, notFound, error, reload } = useResidentProfile(
     id,
     showAdmin
@@ -84,6 +88,9 @@ const ResidentProfilePage: React.FC = () => {
   const lookups = useUserAdminLookups(isManager);
   const [editing, setEditing] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [offboarding, setOffboarding] = useState(false);
+  // Counts what has been done, so the history card loads again.
+  const [historyVersion, setHistoryVersion] = useState(0);
   const [working, setWorking] = useState(false);
   const [newLogin, setNewLogin] = useState<CreatedUser | null>(null);
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
@@ -129,9 +136,8 @@ const ResidentProfilePage: React.FC = () => {
     );
   }
 
-  // Admins can't be deactivated, and nobody deactivates themselves (the server refuses both).
-  const canDeactivate =
-    isManager && profile.isActive && !isSelf && profile.role !== USER_ROLES.ADMIN;
+  // Admins can't be moved out, and nobody moves themselves out (the server refuses both).
+  const canMoveOut = canManage && profile.isActive && !isSelf && profile.role !== USER_ROLES.ADMIN;
   const age = ageFrom(profile.birthDate);
 
   const runAction = async () => {
@@ -143,9 +149,9 @@ const ResidentProfilePage: React.FC = () => {
           tone: 'success',
           text: profile.onLeave ? 'Permisjonen er avsluttet.' : 'Satt på permisjon.',
         });
-      } else if (pendingAction === 'deactivate') {
-        await deleteUser(id);
-        setMessage({ tone: 'success', text: `${profile.name} er deaktivert.` });
+      } else if (pendingAction === 'cancelMoveOut') {
+        await cancelMoveOut(id);
+        setMessage({ tone: 'success', text: 'Den planlagte utflyttingen er avbrutt.' });
       } else if (pendingAction === 'reactivate') {
         const { initialPassword, email } = await reactivateUser(id);
         setMessage({ tone: 'success', text: `${profile.name} er aktiv igjen.` });
@@ -154,6 +160,7 @@ const ResidentProfilePage: React.FC = () => {
           setNewLogin({ name: profile.name, email: email ?? profile.email, initialPassword });
         }
       }
+      setHistoryVersion((version) => version + 1);
       await reload();
     } catch (actionError) {
       setMessage({
@@ -181,10 +188,10 @@ const ResidentProfilePage: React.FC = () => {
           label: 'Sett på permisjon',
           body: `${profile.name} får status permisjon og vises med det i beboerlisten.`,
         },
-    deactivate: {
-      title: 'Deaktivere beboer?',
-      label: 'Deaktiver',
-      body: `${profile.name} mister innloggingen og flyttes til Gamle beboere. Historikken beholdes, og beboeren kan reaktiveres senere.`,
+    cancelMoveOut: {
+      title: 'Avbryte utflyttingen?',
+      label: 'Avbryt utflytting',
+      body: `${profile.name} blir boende, og den planlagte utflyttingen ${formatDeadline(profile.moveOutDate)} fjernes.`,
     },
     reactivate: {
       title: 'Reaktivere beboer?',
@@ -200,6 +207,13 @@ const ResidentProfilePage: React.FC = () => {
       {message && (
         <StatusMessage tone={message.tone} onDismiss={() => setMessage(null)}>
           {message.text}
+        </StatusMessage>
+      )}
+
+      {canManage && profile.isActive && profile.moveOutDate && (
+        <StatusMessage tone="warning">
+          Flytter ut {formatDeadline(profile.moveOutDate)}. Rom, vakter og innlogging ryddes den
+          natten.
         </StatusMessage>
       )}
 
@@ -275,33 +289,44 @@ const ResidentProfilePage: React.FC = () => {
           title="Administrasjon"
           description="Vises bare for romsjef, regisjef, Data og Admin."
           actions={
-            isManager ? (
+            isManager || canManage ? (
               <>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={<Pencil aria-hidden="true" className="h-4 w-4" />}
-                  onClick={() => setEditing(true)}
-                >
-                  Rediger
-                </Button>
-                {profile.isActive && (
+                {isManager && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Pencil aria-hidden="true" className="h-4 w-4" />}
+                    onClick={() => setEditing(true)}
+                  >
+                    Rediger
+                  </Button>
+                )}
+                {isManager && profile.isActive && (
                   <Button variant="secondary" size="sm" onClick={() => setPendingAction('leave')}>
                     {profile.onLeave ? 'Avslutt permisjon' : 'Sett på permisjon'}
                   </Button>
                 )}
-                {canDeactivate && (
+                {canManage && profile.isActive && profile.moveOutDate && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setPendingAction('cancelMoveOut')}
+                  >
+                    Avbryt utflytting
+                  </Button>
+                )}
+                {canMoveOut && (
                   <Button
                     variant="ghost"
                     size="sm"
                     icon={<UserMinus aria-hidden="true" className="h-4 w-4" />}
-                    onClick={() => setPendingAction('deactivate')}
+                    onClick={() => setOffboarding(true)}
                     className="text-danger hover:bg-danger-subtle hover:text-danger"
                   >
-                    Deaktiver
+                    Flytt ut
                   </Button>
                 )}
-                {!profile.isActive && (
+                {canManage && !profile.isActive && (
                   <Button
                     size="sm"
                     icon={<RotateCcw aria-hidden="true" className="h-4 w-4" />}
@@ -405,6 +430,8 @@ const ResidentProfilePage: React.FC = () => {
         </Card>
       )}
 
+      {canManage && <ResidentHistoryCard userId={id} version={historyVersion} />}
+
       {isManager && editing && (
         <EditResidentSheet
           open
@@ -430,11 +457,23 @@ const ResidentProfilePage: React.FC = () => {
         onClose={() => setNewLogin(null)}
       />
 
+      {offboarding && (
+        <OffboardDialog
+          resident={{ id, name: profile.name }}
+          onClose={() => setOffboarding(false)}
+          onDone={(text) => {
+            setOffboarding(false);
+            setMessage({ tone: 'success', text });
+            setHistoryVersion((version) => version + 1);
+            void reload();
+          }}
+        />
+      )}
+
       <ConfirmDialog
         open={!!pendingAction}
         title={pendingAction ? confirmCopy[pendingAction].title : ''}
         confirmLabel={pendingAction ? confirmCopy[pendingAction].label : ''}
-        tone={pendingAction === 'deactivate' ? 'danger' : 'primary'}
         loading={working}
         onCancel={() => setPendingAction(null)}
         onConfirm={() => void runAction()}
