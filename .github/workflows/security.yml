@@ -70,18 +70,9 @@ jobs:
           tar -xzf gitleaks.tar.gz -C "$RUNNER_TEMP/gitleaks" gitleaks
           rm gitleaks.tar.gz
 
-      # A pull request is scanned for the commits it adds; main and the weekly run scan everything.
-      - name: Scan the commits in this pull request
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          "$RUNNER_TEMP/gitleaks/gitleaks" git --no-banner --redact --verbose \
-            --config .gitleaks.toml --log-opts="${BASE_SHA}..${HEAD_SHA}"
-
+      # The whole history every time, pull requests included. It takes seconds, and a pull request that
+      # only looked at its own commits could pass while the push to main failed on older ones.
       - name: Scan the whole history
-        if: github.event_name != 'pull_request'
         run: |
           "$RUNNER_TEMP/gitleaks/gitleaks" git --no-banner --redact --verbose \
             --config .gitleaks.toml
