@@ -182,6 +182,21 @@ is linked to the profile by email.
 CI (`.github/workflows/ci.yml`) runs `format:check`, `lint`, `test` and `build` on every push and
 pull request. Run them before pushing.
 
+## Admin page
+
+**Admin** in the menu is for Data and Admin (the route is guarded the same way, so other roles get
+"Ingen tilgang"). It has four tabs:
+
+- **Oversikt:** what needs a look, each number linking to where it is dealt with: active residents, on
+  leave, without a room, planned move-outs, free places, open room reports and regi waiting for
+  approval. A number that cannot be read shows a dash instead of breaking the page.
+- **Utflyttinger:** planned move-outs in one list (with **Avbryt utflytting**), and a feed of who added,
+  moved out and reactivated residents.
+- **Roller:** who holds each position role (Admin, Data, Romsjef, Regisjef, Vaktsjef, Daglig leder,
+  Utvalgsmedlem). A role nobody holds shows "Ingen". Change a role on the person's profile.
+- **Semester:** the required hours for this semester. Admin and Data can set them (the same card is
+  under Regi, Status).
+
 ## Security checks
 
 [`.github/workflows/security.yml`](.github/workflows/security.yml) runs on every pull request, on pushes
